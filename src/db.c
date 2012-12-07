@@ -59,6 +59,9 @@ robj *lookupKey(redisDb *db, robj *key) {
     }
 }
 
+/* 
+ * 为进行读操作而读取数据库
+ */
 robj *lookupKeyRead(redisDb *db, robj *key) {
 
     robj *val;
@@ -77,6 +80,11 @@ robj *lookupKeyRead(redisDb *db, robj *key) {
     return val;
 }
 
+/*
+ * 为进行写操作而读取数据库
+ * 这个函数和 lookupKeyRead 的区别是
+ * 这个函数不更新命中/不命中计数
+ */
 robj *lookupKeyWrite(redisDb *db, robj *key) {
     expireIfNeeded(db,key);
     return lookupKey(db,key);
