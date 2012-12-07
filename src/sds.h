@@ -36,19 +36,27 @@
 #include <sys/types.h>
 #include <stdarg.h>
 
+// sds 类型
 typedef char *sds;
 
+// sdshdr 结构
 struct sdshdr {
-    int len;
-    int free;
+    int len;        // buf 已占用长度
+    int free;       // buf 可用长度
     char buf[];
 };
 
+/*
+ * 返回 sds buf 的已占用长度
+ */
 static inline size_t sdslen(const sds s) {
     struct sdshdr *sh = (void*)(s-(sizeof(struct sdshdr)));
     return sh->len;
 }
 
+/*
+ * 返回 sds buf 的可用长度
+ */
 static inline size_t sdsavail(const sds s) {
     struct sdshdr *sh = (void*)(s-(sizeof(struct sdshdr)));
     return sh->free;

@@ -36,50 +36,93 @@
 #include "sds.h"
 #include "zmalloc.h"
 
+/*
+ * 创建一个指定长度的 sds 
+ * 如果给定了初始化值 init 的话，那么将 init 复制到 sds 的 buf 当中
+ */
 sds sdsnewlen(const void *init, size_t initlen) {
+
     struct sdshdr *sh;
 
+    // 有 init ？
     if (init) {
         sh = zmalloc(sizeof(struct sdshdr)+initlen+1);
     } else {
         sh = zcalloc(sizeof(struct sdshdr)+initlen+1);
     }
+
+    // 内存不足，分配失败
     if (sh == NULL) return NULL;
+
     sh->len = initlen;
     sh->free = 0;
+
+    // 如果给定了 init 且 initlen 不为 0 的话
+    // 那么将 init 的内容复制至 sds buf
     if (initlen && init)
         memcpy(sh->buf, init, initlen);
+
+    // 加上 NULL 终结符
     sh->buf[initlen] = '\0';
+
+    // 返回 buf 而不是整个 sdshdr
     return (char*)sh->buf;
 }
 
+/*
+ * 创建一个只包含空字符串 "" 的 sds
+ */
 sds sdsempty(void) {
     return sdsnewlen("",0);
 }
 
+/*
+ * 根据给定初始化值 init ，创建 sds
+ * 如果 init 为 NULL ，那么创建一个 buf 内只包含 \0 终结符的 sds
+ */
 sds sdsnew(const char *init) {
     size_t initlen = (init == NULL) ? 0 : strlen(init);
     return sdsnewlen(init, initlen);
 }
 
+/* 
+ * 复制给定 sds
+ */
 sds sdsdup(const sds s) {
     return sdsnewlen(s, sdslen(s));
 }
 
+/*
+ * 释放 sds 所对应的 sdshdr 结构的内存
+ * 给定 sds 必须为 NULL
+ */
 void sdsfree(sds s) {
     if (s == NULL) return;
     zfree(s-sizeof(struct sdshdr));
 }
 
+/*
+ * 更新给定 sds 所对应的 sdshdr 结构的 free 和 len 属性
+ */
 void sdsupdatelen(sds s) {
+
     struct sdshdr *sh = (void*) (s-(sizeof(struct sdshdr)));
+
+    // 计算正确的 buf 长度
     int reallen = strlen(s);
+
+    // 更新属性
     sh->free += (sh->len-reallen);
     sh->len = reallen;
 }
 
+/*
+ * 清除给定 sds buf 中的内容，让它只包含一个 \0 终结符
+ */
 void sdsclear(sds s) {
+
     struct sdshdr *sh = (void*) (s-(sizeof(struct sdshdr)));
+
     sh->free += sh->len;
     sh->len = 0;
     sh->buf[0] = '\0';
@@ -91,39 +134,71 @@ void sdsclear(sds s) {
  * 
  * Note: this does not change the *size* of the sds string as returned
  * by sdslen(), but only the free buffer space we have. */
-sds sdsMakeRoomFor(sds s, size_t addlen) {
+/* 
+ * 对 sds 的 buf 进行扩展，扩展的长度不少于 addlen 。
+ */
+sds sdsMakeRoomFor(
+    sds s,
+    size_t addlen   // 需要增加的空间长度
+) 
+{
     struct sdshdr *sh, *newsh;
     size_t free = sdsavail(s);
     size_t len, newlen;
 
+    // 剩余空间可以满足需求，无须扩展
     if (free >= addlen) return s;
-    len = sdslen(s);
+
     sh = (void*) (s-(sizeof(struct sdshdr)));
+
+    // 目前 buf 长度
+    len = sdslen(s);
+    // 新 buf 长度
     newlen = (len+addlen);
+    // 如果新 buf 长度小于 SDS_MAX_PREALLOC 长度
+    // 那么将 buf 的长度设为新 buf 长度的两倍
     if (newlen < SDS_MAX_PREALLOC)
         newlen *= 2;
     else
         newlen += SDS_MAX_PREALLOC;
+
+    // 扩展长度
     newsh = zrealloc(sh, sizeof(struct sdshdr)+newlen+1);
+
     if (newsh == NULL) return NULL;
 
     newsh->free = newlen - len;
+
     return newsh->buf;
 }
 
 /* Reallocate the sds string so that it has no free space at the end. The
  * contained string remains not altered, but next concatenation operations
  * will require a reallocation. */
+/*
+ * 在不改动 sds buf 内容的情况下，将 buf 内多余的空间释放出去。
+ * 在对 sds 执行这个函数之后，下一次对这个 sds 的拼接操作必然需要一次内存分配。
+ */
 sds sdsRemoveFreeSpace(sds s) {
+
     struct sdshdr *sh;
 
     sh = (void*) (s-(sizeof(struct sdshdr)));
+
+    // 修改 buf 长度为 sh->len + 1 
+    // 不保留任何多余空间
     sh = zrealloc(sh, sizeof(struct sdshdr)+sh->len+1);
+
     sh->free = 0;
+
     return sh->buf;
 }
 
+/*
+ * 计算给定 sds buf 的内存长度（包括已使用和未使用的）
+ */
 size_t sdsAllocSize(sds s) {
+
     struct sdshdr *sh = (void*) (s-(sizeof(struct sdshdr)));
 
     return sizeof(*sh)+sh->len+sh->free+1;
@@ -150,6 +225,37 @@ size_t sdsAllocSize(sds s) {
  * ... check for nread <= 0 and handle it ...
  * sdsIncrLen(s, nhread);
  */
+/*
+ * 在 sds buf 的右端添加 incr 个位置。
+ * 如果 incr 是负数时，可以作为 right-trim 使用
+ *
+ * incr 为正数的例子：
+ * hdr = sdshdr {
+ *          len = 10;
+ *          free = 10;
+ *          buf = "hello moto\0";
+ *       }
+ * sdsIncrLen(hdr->buf, 2);
+ * hdr = sdshdr {
+ *          len = 12;
+ *          free = 8;
+ *          buf = "hello moto\0[ ]\0";
+ *       }
+ * 这里的 [ ] 表示一个任意内容的 byte 。
+ *
+ * incr 为负数的例子：
+ * hdr = sdshdr {
+ *          len = 10;
+ *          free = 10;
+ *          buf = "hello moto\0";
+ *       }
+ * sdsIncrLen(hdr->buf, -2);
+ * hdr = sdshdr {
+ *          len = 8;
+ *          free = 12;
+ *          buf = "hello mo\0";
+ *       }
+ */
 void sdsIncrLen(sds s, int incr) {
     struct sdshdr *sh = (void*) (s-(sizeof(struct sdshdr)));
 
@@ -157,25 +263,38 @@ void sdsIncrLen(sds s, int incr) {
     sh->len += incr;
     sh->free -= incr;
     assert(sh->free >= 0);
+
     s[sh->len] = '\0';
 }
 
 /* Grow the sds to have the specified length. Bytes that were not part of
  * the original length of the sds will be set to zero. */
+/*
+ * 将 sds 的 buf 扩展至给定长度，无内容部分用 0 来填充
+ */
 sds sdsgrowzero(sds s, size_t len) {
+
     struct sdshdr *sh = (void*)(s-(sizeof(struct sdshdr)));
+
     size_t totlen, curlen = sh->len;
 
+    // 现有长度比给定长度要大，无须扩展
     if (len <= curlen) return s;
+
+    // 扩展 sds
     s = sdsMakeRoomFor(s,len-curlen);
     if (s == NULL) return NULL;
 
     /* Make sure added region doesn't contain garbage */
+    // 使用 0 来填充空位，确保空位中不包含垃圾数据
     sh = (void*)(s-(sizeof(struct sdshdr)));
     memset(s+curlen,0,(len-curlen+1)); /* also set trailing \0 byte */
-    totlen = sh->len+sh->free;
+
+    // 更新 len 和 free 属性
+    totlen = sh->len + sh->free;
     sh->len = len;
-    sh->free = totlen-sh->len;
+    sh->free = totlen - sh->len;
+
     return s;
 }
 
