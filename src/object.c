@@ -457,7 +457,14 @@ int getLongDoubleFromObjectOrReply(redisClient *c, robj *o, long double *target,
     return REDIS_OK;
 }
 
-int getLongLongFromObject(robj *o, long long *target) {
+/*
+ * 从对象 o 中提取 long long 值，并使用指针保存所提取的值
+ */
+int getLongLongFromObject(
+    robj *o,            // 提取对象
+    long long *target   // 保存值的指针
+)
+{
     long long value;
     char *eptr;
 
@@ -465,6 +472,7 @@ int getLongLongFromObject(robj *o, long long *target) {
         value = 0;
     } else {
         redisAssertWithInfo(NULL,o,o->type == REDIS_STRING);
+        // 根据不同编码，取出值
         if (o->encoding == REDIS_ENCODING_RAW) {
             errno = 0;
             value = strtoll(o->ptr, &eptr, 10);
@@ -481,7 +489,17 @@ int getLongLongFromObject(robj *o, long long *target) {
     return REDIS_OK;
 }
 
-int getLongLongFromObjectOrReply(redisClient *c, robj *o, long long *target, const char *msg) {
+/* 
+ * 将给定对象 o 的 long long 值取出，并通过指针 target 进行保存
+ * 如果提取失败，添加错误信息 msg 到客户端 c
+ */
+int getLongLongFromObjectOrReply(
+    redisClient *c,
+    robj *o,            // 要提取 long long 值的对象
+    long long *target,  // 保存值的指针
+    const char *msg     // 错误信息
+)
+{
     long long value;
     if (getLongLongFromObject(o, &value) != REDIS_OK) {
         if (msg != NULL) {

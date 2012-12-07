@@ -42,9 +42,21 @@ static int checkStringLength(redisClient *c, long long size) {
     return REDIS_OK;
 }
 
-void setGenericCommand(redisClient *c, int nx, robj *key, robj *val, robj *expire, int unit) {
+/*
+ * 通用 set 命令，用于实现 set / setex / setnx 等命令 
+ */
+void setGenericCommand(
+    redisClient *c,  // 客户端
+    int nx,          // Not eXists 命令？
+    robj *key,       // key
+    robj *val,       // val
+    robj *expire,    // expire 时间
+    int unit         // 过期时间以秒计算？
+)        
+{
     long long milliseconds = 0; /* initialized to avoid an harmness warning */
 
+    // 如果带有 expire 参数，那么将它从字符串转为 long long 类型
     if (expire) {
         if (getLongLongFromObjectOrReply(c, expire, &milliseconds, NULL) != REDIS_OK)
             return;
@@ -52,16 +64,26 @@ void setGenericCommand(redisClient *c, int nx, robj *key, robj *val, robj *expir
             addReplyError(c,"invalid expire time in SETEX");
             return;
         }
+        
+        // 决定过期时间是秒还是毫秒
         if (unit == UNIT_SECONDS) milliseconds *= 1000;
     }
 
+    // 如果给定了 nx 参数，那么只有在 key 不存在时设置才继续
+    // 否则返回 shared.czero ，也即是 0
     if (nx && lookupKeyWrite(c->db,key) != NULL) {
         addReply(c,shared.czero);
         return;
     }
+
+    // 设置 key-value
     setKey(c->db,key,val);
     server.dirty++;
+
+    // 设置 expire time
     if (expire) setExpire(c->db,key,mstime()+milliseconds);
+
+    // 向客户端返回回复
     addReply(c, nx ? shared.cone : shared.ok);
 }
 
