@@ -40,15 +40,19 @@ void SlotToKeyDel(robj *key);
  *----------------------------------------------------------------------------*/
 
 robj *lookupKey(redisDb *db, robj *key) {
+
     dictEntry *de = dictFind(db->dict,key->ptr);
+
     if (de) {
         robj *val = dictGetVal(de);
 
         /* Update the access time for the aging algorithm.
          * Don't do it if we have a saving child, as this will trigger
          * a copy on write madness. */
+        // 如果条件允许，那么更新 lru 时间
         if (server.rdb_child_pid == -1 && server.aof_child_pid == -1)
             val->lru = server.lruclock;
+
         return val;
     } else {
         return NULL;
@@ -56,14 +60,20 @@ robj *lookupKey(redisDb *db, robj *key) {
 }
 
 robj *lookupKeyRead(redisDb *db, robj *key) {
+
     robj *val;
 
+    // 检查 key 是否过期
     expireIfNeeded(db,key);
+
+    // 查找 key ，并根据查找结果更新命中/不命中数
     val = lookupKey(db,key);
     if (val == NULL)
         server.stat_keyspace_misses++;
     else
         server.stat_keyspace_hits++;
+
+    // 返回 key 的值
     return val;
 }
 
@@ -72,6 +82,10 @@ robj *lookupKeyWrite(redisDb *db, robj *key) {
     return lookupKey(db,key);
 }
 
+/*
+ * 从数据库中取出给定 key 的值。
+ * 如果 key 不存在，向客户端发送信息 reply 。
+ */
 robj *lookupKeyReadOrReply(redisClient *c, robj *key, robj *reply) {
     robj *o = lookupKeyRead(c->db, key);
     if (!o) addReply(c,reply);

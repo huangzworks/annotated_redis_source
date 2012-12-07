@@ -107,12 +107,17 @@ void psetexCommand(redisClient *c) {
     setGenericCommand(c,0,c->argv[1],c->argv[3],c->argv[2],UNIT_MILLISECONDS);
 }
 
+/*
+ * 根据客户端指定的 key ，查找相应的值。
+ */
 int getGenericCommand(redisClient *c) {
     robj *o;
 
+    // 查找
     if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.nullbulk)) == NULL)
         return REDIS_OK;
 
+    // 返回
     if (o->type != REDIS_STRING) {
         addReply(c,shared.wrongtypeerr);
         return REDIS_ERR;
