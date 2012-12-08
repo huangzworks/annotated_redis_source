@@ -62,7 +62,7 @@ sds sdsnewlen(const void *init, size_t initlen) {
     if (initlen && init)
         memcpy(sh->buf, init, initlen);
 
-    // 加上 NULL 终结符
+    // 加上终结符
     sh->buf[initlen] = '\0';
 
     // 返回 buf 而不是整个 sdshdr
@@ -459,6 +459,9 @@ void sdstolower(sds s) {
     for (j = 0; j < len; j++) s[j] = tolower(s[j]);
 }
 
+/*
+ * 将给定 sds 中的字符全部转为大写
+ */
 void sdstoupper(sds s) {
     int len = sdslen(s), j;
 
