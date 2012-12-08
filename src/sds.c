@@ -298,45 +298,77 @@ sds sdsgrowzero(sds s, size_t len) {
     return s;
 }
 
+/*
+ * 按长度 len 扩展 sds ，并将 t 拼接到 sds 的末尾
+ */
 sds sdscatlen(sds s, const void *t, size_t len) {
+
     struct sdshdr *sh;
+
     size_t curlen = sdslen(s);
 
     s = sdsMakeRoomFor(s,len);
     if (s == NULL) return NULL;
-    sh = (void*) (s-(sizeof(struct sdshdr)));
+
+    // 复制
     memcpy(s+curlen, t, len);
+
+    // 更新 len 和 free 属性
+    sh = (void*) (s-(sizeof(struct sdshdr)));
     sh->len = curlen+len;
     sh->free = sh->free-len;
+
+    // 终结符
     s[curlen+len] = '\0';
+
     return s;
 }
 
+/*
+ * 将一个 char 数组拼接到 sds 末尾 
+ */
 sds sdscat(sds s, const char *t) {
     return sdscatlen(s, t, strlen(t));
 }
 
+/*
+ * 拼接两个 sds 
+ */
 sds sdscatsds(sds s, const sds t) {
     return sdscatlen(s, t, sdslen(t));
 }
 
+/*
+ * 将一个 char 数组的前 len 个字节复制至 sds
+ * 如果 sds 的 buf 不足以容纳要复制的内容，
+ * 那么扩展 buf 的长度，让 buf 的长度为 len 。
+ */
 sds sdscpylen(sds s, const char *t, size_t len) {
-    struct sdshdr *sh = (void*) (s-(sizeof(struct sdshdr)));
-    size_t totlen = sh->free+sh->len;
 
+    struct sdshdr *sh = (void*) (s-(sizeof(struct sdshdr)));
+
+    // 是否需要扩展 buf ？
+    size_t totlen = sh->free+sh->len;
     if (totlen < len) {
+        // 扩展 buf 长度，长度刚好为 len
         s = sdsMakeRoomFor(s,len-sh->len);
         if (s == NULL) return NULL;
         sh = (void*) (s-(sizeof(struct sdshdr)));
         totlen = sh->free+sh->len;
     }
+
     memcpy(s, t, len);
     s[len] = '\0';
+
     sh->len = len;
     sh->free = totlen-len;
+
     return s;
 }
 
+/*
+ * 将一个 char 数组复制到 sds
+ */
 sds sdscpy(sds s, const char *t) {
     return sdscpylen(s, t, strlen(t));
 }
