@@ -375,25 +375,29 @@ void incrbyfloatCommand(redisClient *c) {
     rewriteClientCommandArgument(c,2,new);
 }
 
+/*
+ * APPEND 命令的实现
+ */
 void appendCommand(redisClient *c) {
     size_t totlen;
     robj *o, *append;
 
+    // 查找 key 对象
     o = lookupKeyWrite(c->db,c->argv[1]);
     if (o == NULL) {
-        /* Create the key */
+        // 对象不存在，创建
         c->argv[2] = tryObjectEncoding(c->argv[2]);
         dbAdd(c->db,c->argv[1],c->argv[2]);
         incrRefCount(c->argv[2]);
         totlen = stringObjectLen(c->argv[2]);
     } else {
-        /* Key exists, check type */
+        // 对象存在，检查它是否为字符串类型
         if (checkType(c,o,REDIS_STRING))
             return;
 
         /* "append" is an argument, so always an sds */
         append = c->argv[2];
-        totlen = stringObjectLen(o)+sdslen(append->ptr);
+        totlen = stringObjectLen(o) + sdslen(append->ptr);
         if (checkStringLength(c,totlen) != REDIS_OK)
             return;
 
@@ -406,6 +410,7 @@ void appendCommand(redisClient *c) {
         }
 
         /* Append the value */
+        // 进行拼接
         o->ptr = sdscatlen(o->ptr,append->ptr,sdslen(append->ptr));
         totlen = sdslen(o->ptr);
     }
