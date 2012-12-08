@@ -34,6 +34,9 @@
  * String Commands
  *----------------------------------------------------------------------------*/
 
+/*
+ * 检查字符串大小是否超过限制
+ */
 static int checkStringLength(redisClient *c, long long size) {
     if (size > 512*1024*1024) {
         addReplyError(c,"string exceeds maximum allowed size (512MB)");
