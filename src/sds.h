@@ -43,7 +43,7 @@ typedef char *sds;
 struct sdshdr {
     int len;        // buf 已占用长度
     int free;       // buf 可用长度
-    char buf[];
+    char buf[];     // 实际保存字符串的地方
 };
 
 /*
