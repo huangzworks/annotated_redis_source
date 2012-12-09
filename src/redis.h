@@ -117,16 +117,21 @@
 #define REDIS_CMD_STALE 1024                /* "t" flag */
 #define REDIS_CMD_SKIP_MONITOR 2048         /* "M" flag */
 
-/* Object types */
+/*
+ * 对象类型
+ */
 #define REDIS_STRING 0
 #define REDIS_LIST 1
 #define REDIS_SET 2
 #define REDIS_ZSET 3
 #define REDIS_HASH 4
 
-/* Objects encoding. Some kind of objects like Strings and Hashes can be
- * internally represented in multiple ways. The 'encoding' field of the object
- * is set to one of this fields for this object. */
+/*
+ * 对象编码
+ *
+ * 像 String 和 Hash 这样的对象，可以有多种内部表示。
+ * 对象的 encoding 属性可以设置为以下域的任意一种。
+ */
 #define REDIS_ENCODING_RAW 0     /* Raw representation */
 #define REDIS_ENCODING_INT 1     /* Encoded as integer */
 #define REDIS_ENCODING_HT 2      /* Encoded as hash table */
@@ -308,13 +313,16 @@
 /* The actual Redis Object */
 #define REDIS_LRU_CLOCK_MAX ((1<<21)-1) /* Max value of obj->lru */
 #define REDIS_LRU_CLOCK_RESOLUTION 10 /* LRU clock resolution in seconds */
+/*
+ * Redis 对象
+ */
 typedef struct redisObject {
-    unsigned type:4;
-    unsigned notused:2;     /* Not used */
-    unsigned encoding:4;
-    unsigned lru:22;        /* lru time (relative to server.lruclock) */
-    int refcount;
-    void *ptr;
+    unsigned type:4;        // 类型
+    unsigned notused:2;     // 不使用(对齐位)
+    unsigned encoding:4;    // 编码方式
+    unsigned lru:22;        // LRU 时间(相对于 server.lruclock)
+    int refcount;           // 引用计数
+    void *ptr;              // 对象的实际值
 } robj;
 
 /* Macro used to initalize a Redis object allocated on the stack.
