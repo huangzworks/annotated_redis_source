@@ -135,7 +135,9 @@ void getCommand(redisClient *c) {
 }
 
 void getsetCommand(redisClient *c) {
+    // 获取现有值，并添加到客户端回复 buffer 中
     if (getGenericCommand(c) == REDIS_ERR) return;
+    // 设置新值
     c->argv[2] = tryObjectEncoding(c->argv[2]);
     setKey(c->db,c->argv[1],c->argv[2]);
     server.dirty++;
@@ -144,49 +146,60 @@ void getsetCommand(redisClient *c) {
 void setrangeCommand(redisClient *c) {
     robj *o;
     long offset;
+
+    // 用来替换旧内容的字符串
     sds value = c->argv[3]->ptr;
 
+    // 检查 offset 是否为 long 类型值
     if (getLongFromObjectOrReply(c,c->argv[2],&offset,NULL) != REDIS_OK)
         return;
 
+    // 检查 offset 是否位于合法范围
     if (offset < 0) {
         addReplyError(c,"offset is out of range");
         return;
     }
 
+    // 查找给定 key
     o = lookupKeyWrite(c->db,c->argv[1]);
+
     if (o == NULL) {
-        /* Return 0 when setting nothing on a non-existing string */
+        // key 不存在 ...
+
+        // 当 value 为空字符串，且 key 不存在时，返回 0
         if (sdslen(value) == 0) {
             addReply(c,shared.czero);
             return;
         }
 
-        /* Return when the resulting string exceeds allowed size */
+        // 当 value 的长度过大时，直接返回
         if (checkStringLength(c,offset+sdslen(value)) != REDIS_OK)
             return;
 
+        // 将 key 设置为空字符串对象
         o = createObject(REDIS_STRING,sdsempty());
         dbAdd(c->db,c->argv[1],o);
     } else {
+        // key 存在 ....
+
         size_t olen;
 
-        /* Key exists, check type */
+        // 检查 key 是否字符串
         if (checkType(c,o,REDIS_STRING))
             return;
 
-        /* Return existing string length when setting nothing */
+        // 如果 value 为空字符串，那么直接返回原有字符串的长度
         olen = stringObjectLen(o);
         if (sdslen(value) == 0) {
             addReplyLongLong(c,olen);
             return;
         }
 
-        /* Return when the resulting string exceeds allowed size */
+        // 检查修改后的字符串长度会否超过最大限制
         if (checkStringLength(c,offset+sdslen(value)) != REDIS_OK)
             return;
 
-        /* Create a copy when the object is shared or encoded. */
+        // 当 o 是共享对象或者编码对象时，创建一个副本
         if (o->refcount != 1 || o->encoding != REDIS_ENCODING_RAW) {
             robj *decoded = getDecodedObject(o);
             o = createStringObject(decoded->ptr, sdslen(decoded->ptr));
@@ -195,12 +208,17 @@ void setrangeCommand(redisClient *c) {
         }
     }
 
+    // 进行修改操作
     if (sdslen(value) > 0) {
+        // 先用 0 字节填充整个范围
         o->ptr = sdsgrowzero(o->ptr,offset+sdslen(value));
+        // 复制
         memcpy((char*)o->ptr+offset,value,sdslen(value));
         signalModifiedKey(c->db,c->argv[1]);
         server.dirty++;
     }
+
+    // 将修改后的字符串的长度返回给客户端
     addReplyLongLong(c,sdslen(o->ptr));
 }
 
@@ -210,13 +228,19 @@ void getrangeCommand(redisClient *c) {
     char *str, llbuf[32];
     size_t strlen;
 
+    // 获取 start 索引
     if (getLongFromObjectOrReply(c,c->argv[2],&start,NULL) != REDIS_OK)
         return;
+
+    // 获取 end 索引
     if (getLongFromObjectOrReply(c,c->argv[3],&end,NULL) != REDIS_OK)
         return;
+
+    // 检查 key 是否不存在，或者不为 String 类型
     if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.emptybulk)) == NULL ||
         checkType(c,o,REDIS_STRING)) return;
 
+    // 获取字符串，以及它的长度
     if (o->encoding == REDIS_ENCODING_INT) {
         str = llbuf;
         strlen = ll2string(llbuf,sizeof(llbuf),(long)o->ptr);
@@ -225,7 +249,7 @@ void getrangeCommand(redisClient *c) {
         strlen = sdslen(str);
     }
 
-    /* Convert negative indexes */
+    // 对负数索引进行转换
     if (start < 0) start = strlen+start;
     if (end < 0) end = strlen+end;
     if (start < 0) start = 0;
@@ -244,6 +268,7 @@ void getrangeCommand(redisClient *c) {
 void mgetCommand(redisClient *c) {
     int j;
 
+    // 执行多个读取
     addReplyMultiBulkLen(c,c->argc-1);
     for (j = 1; j < c->argc; j++) {
         robj *o = lookupKeyRead(c->db,c->argv[j]);
@@ -266,25 +291,30 @@ void msetGenericCommand(redisClient *c, int nx) {
         addReplyError(c,"wrong number of arguments for MSET");
         return;
     }
-    /* Handle the NX flag. The MSETNX semantic is to return zero and don't
-     * set nothing at all if at least one already key exists. */
+
+    // 当 NX 选项打开时，检查给定的 key 是否已经存在
+    // 如果任一个 key 存在的话，不进行修改，直接返回 0
     if (nx) {
         for (j = 1; j < c->argc; j += 2) {
             if (lookupKeyWrite(c->db,c->argv[j]) != NULL) {
                 busykeys++;
             }
         }
+        // 如果有已存在 key ，不做动作直接返回
         if (busykeys) {
             addReply(c, shared.czero);
             return;
         }
     }
 
+    // 执行多个写入
     for (j = 1; j < c->argc; j += 2) {
         c->argv[j+1] = tryObjectEncoding(c->argv[j+1]);
         setKey(c->db,c->argv[j],c->argv[j+1]);
     }
+
     server.dirty += (c->argc-1)/2;
+
     addReply(c, nx ? shared.cone : shared.ok);
 }
 
@@ -300,24 +330,37 @@ void incrDecrCommand(redisClient *c, long long incr) {
     long long value, oldvalue;
     robj *o, *new;
 
+    // 查找 key
     o = lookupKeyWrite(c->db,c->argv[1]);
+
+    // 如果 key 非空且 key 类型错误，直接返回
     if (o != NULL && checkType(c,o,REDIS_STRING)) return;
+
+    // 如果值不能转换为数字，直接返回
     if (getLongLongFromObjectOrReply(c,o,&value,NULL) != REDIS_OK) return;
 
+    // 溢出和值是否会溢出
     oldvalue = value;
     if ((incr < 0 && oldvalue < 0 && incr < (LLONG_MIN-oldvalue)) ||
         (incr > 0 && oldvalue > 0 && incr > (LLONG_MAX-oldvalue))) {
         addReplyError(c,"increment or decrement would overflow");
         return;
     }
+
+    // 计算和值
     value += incr;
+    // 保存结果到对象
     new = createStringObjectFromLongLong(value);
+    // 根据 o 对象是否存在，选择覆写或者新建对象
     if (o)
         dbOverwrite(c->db,c->argv[1],new);
     else
         dbAdd(c->db,c->argv[1],new);
+
     signalModifiedKey(c->db,c->argv[1]);
+
     server.dirty++;
+
     addReply(c,shared.colon);
     addReply(c,new);
     addReply(c,shared.crlf);
@@ -334,14 +377,18 @@ void decrCommand(redisClient *c) {
 void incrbyCommand(redisClient *c) {
     long long incr;
 
+    // 获取增量数值
     if (getLongLongFromObjectOrReply(c, c->argv[2], &incr, NULL) != REDIS_OK) return;
+
     incrDecrCommand(c,incr);
 }
 
 void decrbyCommand(redisClient *c) {
     long long incr;
 
+    // 获取减量数值
     if (getLongLongFromObjectOrReply(c, c->argv[2], &incr, NULL) != REDIS_OK) return;
+
     incrDecrCommand(c,-incr);
 }
 
@@ -349,24 +396,36 @@ void incrbyfloatCommand(redisClient *c) {
     long double incr, value;
     robj *o, *new, *aux;
 
+    // 获取 key 对象
     o = lookupKeyWrite(c->db,c->argv[1]);
+
+    // 如果对象存在且不为 string 类型，直接返回
     if (o != NULL && checkType(c,o,REDIS_STRING)) return;
+
+    // 如果对象 o 或者传入增量参数不是浮点数，直接返回
     if (getLongDoubleFromObjectOrReply(c,o,&value,NULL) != REDIS_OK ||
         getLongDoubleFromObjectOrReply(c,c->argv[2],&incr,NULL) != REDIS_OK)
         return;
 
+    // 计算和
     value += incr;
+    // 溢出检查
     if (isnan(value) || isinf(value)) {
         addReplyError(c,"increment would produce NaN or Infinity");
         return;
     }
+
+    // 创建并保存新对象
     new = createStringObjectFromLongDouble(value);
     if (o)
         dbOverwrite(c->db,c->argv[1],new);
     else
         dbAdd(c->db,c->argv[1],new);
+
     signalModifiedKey(c->db,c->argv[1]);
+
     server.dirty++;
+
     addReplyBulk(c,new);
 
     /* Always replicate INCRBYFLOAT as a SET command with the final value
@@ -424,7 +483,10 @@ void appendCommand(redisClient *c) {
 
 void strlenCommand(redisClient *c) {
     robj *o;
+
+    // 如果 o 不存在，或者不为 string 类型，直接返回
     if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.czero)) == NULL ||
         checkType(c,o,REDIS_STRING)) return;
+
     addReplyLongLong(c,stringObjectLen(o));
 }
