@@ -238,9 +238,12 @@ int ll2string(char *s, size_t len, long long value) {
     return l;
 }
 
-/* Convert a string into a long long. Returns 1 if the string could be parsed
- * into a (non-overflowing) long long, 0 otherwise. The value will be set to
- * the parsed value when appropriate. */
+/*
+ * 将一个字符串转换为 long logn 整数值
+ *
+ * 转换成功返回 1 ，失败返回 0 。
+ * 转换成功时，将 value 的值设为转换所得的 long long 值。
+ */
 int string2ll(const char *s, size_t slen, long long *value) {
     const char *p = s;
     size_t plen = 0;
