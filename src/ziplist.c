@@ -6,30 +6,60 @@
  * the memory used by the ziplist, the actual complexity is related to the
  * amount of memory used by the ziplist.
  *
+ * Ziplist 是为内存占用而特别优化的双链表。
+ *
+ * 它可以保存字符串和整数，其中整数以整数类型而不是字符串来进行编码和保存。
+ *
+ * 对 ziplist 的两端进行 push 和 pop 的复杂度都为 O(1) ，
+ * 不过，因为对 ziplist 的每次修改操作都需要进行内存重分配，
+ * 因此，实际的时间复杂度与 ziplist 使用的内存大小有关。
+ *
  * ----------------------------------------------------------------------------
  *
  * ZIPLIST OVERALL LAYOUT:
+ *
  * The general layout of the ziplist is as follows:
+ *
+ * 以下是 ziplist 的内存结构：
+ *
  * <zlbytes><zltail><zllen><entry><entry><zlend>
  *
  * <zlbytes> is an unsigned integer to hold the number of bytes that the
  * ziplist occupies. This value needs to be stored to be able to resize the
  * entire structure without the need to traverse it first.
  *
+ * <zlbytes> 是一个无符号整数，用于记录整个 ziplist 所占用的字节数量。
+ * 通过保存这个值，可以在不遍历整个 ziplist 的前提下，对整个 ziplist 进行内存重分配。
+ *
  * <zltail> is the offset to the last entry in the list. This allows a pop
  * operation on the far side of the list without the need for full traversal.
+ *
+ * <zltail> 是到列表中最后一个实体的偏移量。
+ * 有了这个偏移量，就可以在常数复杂度内对表尾进行操作，而不必遍历整个列表。
  *
  * <zllen> is the number of entries.When this value is larger than 2**16-2,
  * we need to traverse the entire list to know how many items it holds.
  *
+ * <zllen> 是实体的数量。
+ * 当这个值大于 2**16-2 时，需要遍历整个列表，才能计算出列表的长度
+ *
  * <zlend> is a single byte special value, equal to 255, which indicates the
  * end of the list.
  *
+ * <zlend> 是一个单字节的特殊值，等于 255 ，它标识了列表的末端。
+ *
  * ZIPLIST ENTRIES:
+ *
  * Every entry in the ziplist is prefixed by a header that contains two pieces
  * of information. First, the length of the previous entry is stored to be
  * able to traverse the list from back to front. Second, the encoding with an
  * optional string length of the entry itself is stored.
+ *
+ * Ziplist 中的每个实体，都带有一个 header 作为前缀。
+ *
+ * Header 包括两部分：
+ * 1) 前一个实体的长度，在从后往前遍历时使用
+ * 2) (可选)这个实体所储存的字符串的长度
  *
  * The length of the previous entry is encoded in the following way:
  * If this length is smaller than 254 bytes, it will only consume a single
@@ -37,6 +67,11 @@
  * equal to 254, it will consume 5 bytes. The first byte is set to 254 to
  * indicate a larger value is following. The remaining 4 bytes take the
  * length of the previous entry as value.
+ *
+ * 前一个实体的长度的储存方式如下：
+ * 如果实体的长度 < 254 ，那么直接用一个字节保存这个值。
+ * 如果实体的长度 >= 254 ，那么将第一个字节设置为 254 ，
+ * 再在之后用 4 个字节来表示实体的实际长度。
  *
  * The other header field of the entry itself depends on the contents of the
  * entry. When the entry is a string, the first 2 bits of this header will hold
@@ -46,29 +81,53 @@
  * integer will be stored after this header. An overview of the different
  * types and encodings is as follows:
  *
+ * 另一个 header 域保存的信息取决于这个实体所保存的内容本身。
+ *
+ * 当实体保存的是字符串时，header 的前 2 位用于指示保存内容长度所使用的编码方式，
+ * 之后跟着的是内容长度的值。
+ *
+ * 当实体保存的是整数时，header 的前 2 位都设置为 1 ，
+ * 之后的 2 位用于指示保存的整数值的类型。
+ *
+ * 以下是不同类型 header 的概览：
+ * 
  * |00pppppp| - 1 byte
  *      String value with length less than or equal to 63 bytes (6 bits).
+ *      长度 <= 63 字节(6 位)的字符串值
  * |01pppppp|qqqqqqqq| - 2 bytes
  *      String value with length less than or equal to 16383 bytes (14 bits).
+ *      长度 <= 16383 字节(14 位)的字符串值
  * |10______|qqqqqqqq|rrrrrrrr|ssssssss|tttttttt| - 5 bytes
  *      String value with length greater than or equal to 16384 bytes.
+ *      长度 >= 16384 字节的字符串值
  * |11000000| - 1 byte
  *      Integer encoded as int16_t (2 bytes).
+ *      以 int16_t (2 字节)类型编码的整数
  * |11010000| - 1 byte
  *      Integer encoded as int32_t (4 bytes).
+ *      以 int32_t (4 字节)类型编码的整数
  * |11100000| - 1 byte
  *      Integer encoded as int64_t (8 bytes).
+ *      以 int64_t (8 字节)类型编码的整数
  * |11110000| - 1 byte
  *      Integer encoded as 24 bit signed (3 bytes).
+ *      24 位(3 字节)有符号编码整数
  * |11111110| - 1 byte
  *      Integer encoded as 8 bit signed (1 byte).
+ *      8 位(1 字节)有符号编码整数
  * |1111xxxx| - (with xxxx between 0000 and 1101) immediate 4 bit integer.
  *      Unsigned integer from 0 to 12. The encoded value is actually from
  *      1 to 13 because 0000 and 1111 can not be used, so 1 should be
  *      subtracted from the encoded 4 bit value to obtain the right value.
+ *      (介于 0000 和 1101 之间)的 4 位整数，可用于表示无符号整数 0 至 12 。
+ *      因为 0000 和 1111 都已经被占用，因此，可被编码的值实际上只能是 1 至 13 ，
+ *      要将这个值减去 1 ，才能得到正确的值。
  * |11111111| - End of ziplist.
+ *      ziplist 的终结符
  *
  * All the integers are represented in little endian byte order.
+ * 
+ * 所有整数都以小端表示。
  *
  * ----------------------------------------------------------------------------
  *
