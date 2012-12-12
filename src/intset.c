@@ -256,7 +256,12 @@ static void intsetMoveTail(intset *is, uint32_t from, uint32_t to) {
     memmove(dst,src,bytes);
 }
 
-/* Insert an integer in the intset */
+/*
+ * 将 value 添加到集合中
+ *
+ * 如果元素已经存在， *success 被设置为 0 ，
+ * 如果元素添加成功， *success 被设置为 1 。
+ */
 intset *intsetAdd(intset *is, int64_t value, uint8_t *success) {
     uint8_t valenc = _intsetValueEncoding(value);
     uint32_t pos;
@@ -285,8 +290,11 @@ intset *intsetAdd(intset *is, int64_t value, uint8_t *success) {
         if (pos < intrev32ifbe(is->length)) intsetMoveTail(is,pos,pos+1);
     }
 
+    // 添加新元素
     _intsetSet(is,pos,value);
+    // 更新元素数量
     is->length = intrev32ifbe(intrev32ifbe(is->length)+1);
+
     return is;
 }
 
