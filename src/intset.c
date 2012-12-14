@@ -43,6 +43,8 @@
 
 /*
  * 返回编码 v 所需的长度
+ *
+ * T = theta(1)
  */
 static uint8_t _intsetValueEncoding(int64_t v) {
     if (v < INT32_MIN || v > INT32_MAX)
@@ -55,6 +57,8 @@ static uint8_t _intsetValueEncoding(int64_t v) {
 
 /*
  * 根据给定的编码方式，返回给定位置上的值
+ *
+ * T = theta(1)
  */
 static int64_t _intsetGetEncoded(intset *is, int pos, uint8_t enc) {
     int64_t v64;
@@ -78,6 +82,8 @@ static int64_t _intsetGetEncoded(intset *is, int pos, uint8_t enc) {
 
 /*
  * 返回 intset 上给定 pos 的值
+ *
+ * T = theta(1)
  */
 static int64_t _intsetGet(intset *is, int pos) {
     return _intsetGetEncoded(is,pos,intrev32ifbe(is->encoding));
@@ -85,6 +91,8 @@ static int64_t _intsetGet(intset *is, int pos) {
 
 /*
  * 将 intset 上给定 pos 的值设置为 value
+ *
+ * T = theta(1)
  */
 static void _intsetSet(intset *is, int pos, int64_t value) {
     uint32_t encoding = intrev32ifbe(is->encoding);
@@ -103,6 +111,8 @@ static void _intsetSet(intset *is, int pos, int64_t value) {
 
 /*
  * 创建一个空的 intset
+ *
+ * T = theta(1)
  */
 intset *intsetNew(void) {
 
@@ -116,6 +126,8 @@ intset *intsetNew(void) {
 
 /*
  * 调整 intset 的大小
+ *
+ * T = O(n)
  */
 static intset *intsetResize(intset *is, uint32_t len) {
     uint32_t size = len*intrev32ifbe(is->encoding);
@@ -128,6 +140,8 @@ static intset *intsetResize(intset *is, uint32_t len) {
  *
  * 查找成功时，将索引保存到 pos ，并返回 1 。
  * 查找失败时，返回 0 ，并将 value 可以插入的索引保存到 pos 。
+ *
+ * T = O(lg N)
  */
 static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
     int min = 0,
@@ -181,6 +195,8 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
 /*
  * 根据 value ，对 intset 所使用的编码方式进行升级，并扩容 intset 
  * 最后将 value 插入到新 intset 中。
+ *
+ * T = O(n)
  */
 static intset *intsetUpgradeAndAdd(intset *is, int64_t value) {
 
@@ -202,7 +218,16 @@ static intset *intsetUpgradeAndAdd(intset *is, int64_t value) {
     /* Upgrade back-to-front so we don't overwrite values.
      * Note that the "prepend" variable is used to make sure we have an empty
      * space at either the beginning or the end of the intset. */
-    //  "prepend" 是为插入新值而设置的便宜值
+    // 从最后的元素开始进行重新插入
+    // 以新元素插入到最开始为例子，之前：
+    // | 1 | 2 | 3 |
+    // 之后：
+    // | 1 | 2 |                      |    3    |   重插入 3
+    // | 1 |                |    2    |    3    |   重插入 2
+    // |          |    1    |    2    |    3    |   重插入 1
+    // |  ??????  |    1    |    2    |    3    |   ??? 预留给新元素的空位
+    //
+    //  "prepend" 是为插入新值而设置的索引偏移量
     while(length--)
         _intsetSet(is,length+prepend,_intsetGetEncoded(is,length,curenc));
 
@@ -226,6 +251,8 @@ static intset *intsetUpgradeAndAdd(intset *is, int64_t value) {
  *   | 1 | 2 | 3 | 4 |
  * 之后：
  *   | 1 | 3 | 4 | 4 |
+ *
+ * T = theta(n)
  */
 static void intsetMoveTail(intset *is, uint32_t from, uint32_t to) {
     void *src, *dst;
@@ -261,6 +288,8 @@ static void intsetMoveTail(intset *is, uint32_t from, uint32_t to) {
  *
  * 如果元素已经存在， *success 被设置为 0 ，
  * 如果元素添加成功， *success 被设置为 1 。
+ *
+ * T = O(n)
  */
 intset *intsetAdd(intset *is, int64_t value, uint8_t *success) {
     uint8_t valenc = _intsetValueEncoding(value);
@@ -287,6 +316,8 @@ intset *intsetAdd(intset *is, int64_t value, uint8_t *success) {
 
         // 扩张 is ，准备添加新元素
         is = intsetResize(is,intrev32ifbe(is->length)+1);
+        // 如果 pos 不是数组中最后一个位置，
+        // 那么对数组中的原有元素进行移动
         if (pos < intrev32ifbe(is->length)) intsetMoveTail(is,pos,pos+1);
     }
 
@@ -302,6 +333,8 @@ intset *intsetAdd(intset *is, int64_t value, uint8_t *success) {
  * 把 value 从 intset 中移除
  *
  * 移除成功将 *success 设置为 1 ，失败则设置为 0 。
+ *
+ * T = O(n)
  */
 intset *intsetRemove(intset *is, int64_t value, int *success) {
     uint8_t valenc = _intsetValueEncoding(value);
@@ -331,6 +364,8 @@ intset *intsetRemove(intset *is, int64_t value, int *success) {
 
 /*
  * 查看 value 是否存在于 is
+ *
+ * T = O(lg N)
  */
 uint8_t intsetFind(intset *is, int64_t value) {
     uint8_t valenc = _intsetValueEncoding(value);
@@ -340,6 +375,8 @@ uint8_t intsetFind(intset *is, int64_t value) {
 
 /*
  * 随机返回一个 intset 里的元素
+ *
+ * T = theta(1)
  */
 int64_t intsetRandom(intset *is) {
     return _intsetGet(is,rand()%intrev32ifbe(is->length));
@@ -349,6 +386,8 @@ int64_t intsetRandom(intset *is) {
  * 将 is 中位置 pos 的值保存到 *value 当中，并返回 1 。
  * 
  * 如果 pos 超过 is 的元素数量(out of range)，那么返回 0 。
+ *
+ * T = theta(1)
  */
 uint8_t intsetGet(intset *is, uint32_t pos, int64_t *value) {
     if (pos < intrev32ifbe(is->length)) {
@@ -360,6 +399,8 @@ uint8_t intsetGet(intset *is, uint32_t pos, int64_t *value) {
 
 /*
  * 返回 intset 的元素数量
+ *
+ * T = theta(1)
  */
 uint32_t intsetLen(intset *is) {
     return intrev32ifbe(is->length);
@@ -367,6 +408,8 @@ uint32_t intsetLen(intset *is) {
 
 /*
  * 以字节形式返回 intset 占用的空间大小
+ *
+ * T = theta(1)
  */
 size_t intsetBlobLen(intset *is) {
     return sizeof(intset)+intrev32ifbe(is->length)*intrev32ifbe(is->encoding);
