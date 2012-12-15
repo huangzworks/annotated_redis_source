@@ -38,22 +38,31 @@
 #ifndef __DICT_H
 #define __DICT_H
 
+/*
+ * 操作返回状态
+ */
 #define DICT_OK 0
 #define DICT_ERR 1
 
 /* Unused arguments generate annoying warnings... */
 #define DICT_NOTUSED(V) ((void) V)
 
+/*
+ * 哈希表节点
+ */
 typedef struct dictEntry {
-    void *key;
-    union {
+    void *key;              // 键
+    union {                 // 值
         void *val;
         uint64_t u64;
         int64_t s64;
     } v;
-    struct dictEntry *next;
+    struct dictEntry *next; // 链往后继节点
 } dictEntry;
 
+/*
+ * 特定于类型的一簇处理函数
+ */
 typedef struct dictType {
     unsigned int (*hashFunction)(const void *key);
     void *(*keyDup)(void *privdata, const void *key);
@@ -63,34 +72,47 @@ typedef struct dictType {
     void (*valDestructor)(void *privdata, void *obj);
 } dictType;
 
-/* This is our hash table structure. Every dictionary has two of this as we
- * implement incremental rehashing, for the old to the new table. */
+/*
+ * 哈希表
+ */
 typedef struct dictht {
-    dictEntry **table;
-    unsigned long size;
-    unsigned long sizemask;
-    unsigned long used;
+    dictEntry **table;      // 一个数组，数组元素为指向哈希表节点的指针
+    unsigned long size;     // 数组长度
+    unsigned long sizemask; // 数组长度掩码，用于计算元素的哈希值
+    unsigned long used;     // 已有节点数量
 } dictht;
 
+/*
+ * 字典
+ *
+ * 每个字典使用两个哈希表，用于实现渐进式 rehash
+ */
 typedef struct dict {
-    dictType *type;
+    dictType *type;     // 特定于类型的处理函数
     void *privdata;
-    dictht ht[2];
-    int rehashidx; /* rehashing not in progress if rehashidx == -1 */
-    int iterators; /* number of iterators currently running */
+    dictht ht[2];       // 哈希表（2个）
+    int rehashidx;      // 记录 rehash 进度的标志，-1 表示未进行 rehash
+    int iterators;      // 当前正在运作的迭代器数量
 } dict;
 
-/* If safe is set to 1 this is a safe iterator, that means, you can call
- * dictAdd, dictFind, and other functions against the dictionary even while
- * iterating. Otherwise it is a non safe iterator, and only dictNext()
- * should be called while iterating. */
+/*
+ * 字典迭代器
+ *
+ * 如果 safe 属性的值为 1 ，那么表示这个迭代器是一个安全迭代器。
+ * 
+ * 当安全迭代器正在运作时，仍然可以对字典调用 dictAdd 、 dictFind 和其他函数。
+ * 如果正在运作的迭代器是不安全的，那么只可以对字典调用 dictNext 函数。
+ */
 typedef struct dictIterator {
-    dict *d;
-    int table, index, safe;
-    dictEntry *entry, *nextEntry;
+    dict *d;                // 正在迭代的字典
+    int table,              // 哈希表的号码（0 或者 1）
+        index,              // 
+        safe;
+    dictEntry *entry,       // 当前哈希节点
+              *nextEntry;   // 当前哈希节点的后继节点
 } dictIterator;
 
-/* This is the initial size of every hash table */
+// 所有哈希表的起始大小
 #define DICT_HT_INITIAL_SIZE     4
 
 /* ------------------------------- Macros ------------------------------------*/
