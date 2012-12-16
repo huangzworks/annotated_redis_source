@@ -682,6 +682,9 @@ void *dictFetchValue(dict *d, const void *key) {
     return he ? dictGetVal(he) : NULL;
 }
 
+/*
+ * 根据给定字典，创建一个不安全迭代器。
+ */
 dictIterator *dictGetIterator(dict *d)
 {
     dictIterator *iter = zmalloc(sizeof(*iter));
@@ -692,9 +695,13 @@ dictIterator *dictGetIterator(dict *d)
     iter->safe = 0;
     iter->entry = NULL;
     iter->nextEntry = NULL;
+
     return iter;
 }
 
+/*
+ * 根据给定字典，创建一个安全迭代器。
+ */
 dictIterator *dictGetSafeIterator(dict *d) {
     dictIterator *i = dictGetIterator(d);
 
@@ -702,27 +709,53 @@ dictIterator *dictGetSafeIterator(dict *d) {
     return i;
 }
 
+/*
+ * 返回迭代器指向的当前节点。
+ *
+ * 如果字典已经迭代完毕，返回 NULL 。
+ */
 dictEntry *dictNext(dictIterator *iter)
 {
     while (1) {
         if (iter->entry == NULL) {
+
             dictht *ht = &iter->d->ht[iter->table];
-            if (iter->safe && iter->index == -1 && iter->table == 0)
+
+            // 在开始迭代之前，增加字典 iterators 计数器的值
+            // 只有安全迭代器才会增加计数
+            if (iter->safe &&
+                iter->index == -1 &&
+                iter->table == 0)
                 iter->d->iterators++;
+
+            // 增加索引
             iter->index++;
+
+            // 当迭代的元素数量超过 ht->size 的值
+            // 说明这个表已经迭代完毕了
             if (iter->index >= (signed) ht->size) {
+                // 是否接着迭代 ht[1] ?
                 if (dictIsRehashing(iter->d) && iter->table == 0) {
                     iter->table++;
                     iter->index = 0;
                     ht = &iter->d->ht[1];
                 } else {
+                // 如果没有 ht[1] ，或者已经迭代完了 ht[1] 到达这里
+                // 跳出
                     break;
                 }
             }
+
+            // 指向下一索引的节点链表
             iter->entry = ht->table[iter->index];
+
         } else {
+            // 指向链表的下一节点
             iter->entry = iter->nextEntry;
         }
+
+        // 保存后继指针 nextEntry，
+        // 以应对当前节点 entry 可能被修改的情况
         if (iter->entry) {
             /* We need to save the 'next' here, the iterator user
              * may delete the entry we are returning. */
@@ -733,23 +766,37 @@ dictEntry *dictNext(dictIterator *iter)
     return NULL;
 }
 
+/*
+ * 释放迭代器
+ */
 void dictReleaseIterator(dictIterator *iter)
 {
     if (iter->safe && !(iter->index == -1 && iter->table == 0))
         iter->d->iterators--;
+
     zfree(iter);
 }
 
-/* Return a random entry from the hash table. Useful to
- * implement randomized algorithms */
+/*
+ * 从字典中返回一个随机节点。
+ *
+ * 可用于实现随机化算法。
+ *
+ * 如果字典为空，返回 NULL 。
+ */
 dictEntry *dictGetRandomKey(dict *d)
 {
     dictEntry *he, *orighe;
     unsigned int h;
     int listlen, listele;
 
+    // 空表，返回 NULL
     if (dictSize(d) == 0) return NULL;
+
+    // 渐进式 rehash
     if (dictIsRehashing(d)) _dictRehashStep(d);
+
+    // 根据哈希表的使用情况，随机从哈希表中挑选一个非空表头
     if (dictIsRehashing(d)) {
         do {
             h = random() % (d->ht[0].size+d->ht[1].size);
@@ -767,39 +814,57 @@ dictEntry *dictGetRandomKey(dict *d)
      * list and we need to get a random element from the list.
      * The only sane way to do so is counting the elements and
      * select a random index. */
+    // 随机获取链表中的其中一个元素
+    // 计算链表长度
     listlen = 0;
     orighe = he;
     while(he) {
         he = he->next;
         listlen++;
     }
+    // 计算随机值
     listele = random() % listlen;
+
+    // 取出对应节点
     he = orighe;
     while(listele--) he = he->next;
+
+    // 返回
     return he;
 }
 
 /* ------------------------- private functions ------------------------------ */
 
 /* Expand the hash table if needed */
+/*
+ *
+ */
 static int _dictExpandIfNeeded(dict *d)
 {
-    /* Incremental rehashing already in progress. Return. */
+    // 已经在渐进式 rehash 当中，直接返回
     if (dictIsRehashing(d)) return DICT_OK;
 
-    /* If the hash table is empty expand it to the intial size. */
+    // 如果哈希表为空，那么将它扩展为初始大小
     if (d->ht[0].size == 0) return dictExpand(d, DICT_HT_INITIAL_SIZE);
 
     /* If we reached the 1:1 ratio, and we are allowed to resize the hash
      * table (global setting) or we should avoid it but the ratio between
      * elements/buckets is over the "safe" threshold, we resize doubling
-     * the number of buckets. */
+     * the number of buckets. */    
+    // 如果哈希表的已用节点数 >= 哈希表的大小，
+    // 并且以下条件任一个为真：
+    //   1) dict_can_resize 为真
+    //   2) 已用节点数除以哈希表大小之比大于 
+    //      dict_force_resize_ratio
+    // 那么调用 dictExpand 对哈希表进行扩展
+    // 扩展的体积至少为已使用节点数的两倍
     if (d->ht[0].used >= d->ht[0].size &&
         (dict_can_resize ||
          d->ht[0].used/d->ht[0].size > dict_force_resize_ratio))
     {
         return dictExpand(d, d->ht[0].used*2);
     }
+
     return DICT_OK;
 }
 

@@ -76,9 +76,9 @@ typedef struct dictType {
  * 哈希表
  */
 typedef struct dictht {
-    dictEntry **table;      // 一个数组，数组元素为指向哈希表节点的指针
-    unsigned long size;     // 数组长度
-    unsigned long sizemask; // 数组长度掩码，用于计算元素的哈希值
+    dictEntry **table;      // 哈希表数组，数组元素为指向哈希表节点的指针
+    unsigned long size;     // table 数组的长度
+    unsigned long sizemask; // 数组长度掩码，用于计算索引值
     unsigned long used;     // 已有节点数量
 } dictht;
 
@@ -92,22 +92,23 @@ typedef struct dict {
     void *privdata;
     dictht ht[2];       // 哈希表（2个）
     int rehashidx;      // 记录 rehash 进度的标志，-1 表示未进行 rehash
-    int iterators;      // 当前正在运作的迭代器数量
+    int iterators;      // 当前正在运作的安全迭代器数量
 } dict;
 
 /*
  * 字典迭代器
  *
  * 如果 safe 属性的值为 1 ，那么表示这个迭代器是一个安全迭代器。
- * 
- * 当安全迭代器正在运作时，仍然可以对字典调用 dictAdd 、 dictFind 和其他函数。
- * 如果正在运作的迭代器是不安全的，那么只可以对字典调用 dictNext 函数。
+ * 当安全迭代器正在迭代一个字典时，该字典仍然可以调用 dictAdd 、 dictFind 和其他函数。
+ *
+ * 如果 safe 属性的值为 0 ，那么表示这不是一个安全迭代器。
+ * 如果正在运作的迭代器是不安全迭代器，那么它只可以对字典调用 dictNext 函数。
  */
 typedef struct dictIterator {
     dict *d;                // 正在迭代的字典
-    int table,              // 哈希表的号码（0 或者 1）
-        index,              // 
-        safe;
+    int table,              // 正在迭代的哈希表的号码（0 或者 1）
+        index,              // 正在迭代的哈希表数组的索引
+        safe;               // 是否安全？
     dictEntry *entry,       // 当前哈希节点
               *nextEntry;   // 当前哈希节点的后继节点
 } dictIterator;
