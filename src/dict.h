@@ -64,11 +64,17 @@ typedef struct dictEntry {
  * 特定于类型的一簇处理函数
  */
 typedef struct dictType {
+    // 计算键的哈希值函数
     unsigned int (*hashFunction)(const void *key);
+    // 复制键的函数
     void *(*keyDup)(void *privdata, const void *key);
+    // 复制值的函数
     void *(*valDup)(void *privdata, const void *obj);
+    // 对比两个键的函数
     int (*keyCompare)(void *privdata, const void *key1, const void *key2);
+    // 键的释构函数
     void (*keyDestructor)(void *privdata, void *key);
+    // 值的释构函数
     void (*valDestructor)(void *privdata, void *obj);
 } dictType;
 
