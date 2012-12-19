@@ -293,10 +293,10 @@ int dictRehash(dict *d, int n) {
             // 释放 ht[0] 的哈希表数组
             zfree(d->ht[0].table);
 
-            // 复制 ht[1] 到 ht[0]
+            // 将 ht[0] 指向 ht[1]
             d->ht[0] = d->ht[1];
 
-            // 清空 ht[1]
+            // 清空 ht[1] 的指针
             _dictReset(&d->ht[1]);
 
             // 关闭 rehash 标识
