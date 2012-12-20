@@ -457,13 +457,13 @@ void appendCommand(redisClient *c) {
         if (checkType(c,o,REDIS_STRING))
             return;
 
-        /* "append" is an argument, so always an sds */
+        // 检查 append 参数和 key 的字符串的长度是否合法
         append = c->argv[2];
         totlen = stringObjectLen(o) + sdslen(append->ptr);
         if (checkStringLength(c,totlen) != REDIS_OK)
             return;
 
-        /* If the object is shared or encoded, we have to make a copy */
+        // 如果 key 对象是共享或被编码的，那么创建一个副本
         if (o->refcount != 1 || o->encoding != REDIS_ENCODING_RAW) {
             robj *decoded = getDecodedObject(o);
             o = createStringObject(decoded->ptr, sdslen(decoded->ptr));
@@ -471,7 +471,6 @@ void appendCommand(redisClient *c) {
             dbOverwrite(c->db,c->argv[1],o);
         }
 
-        /* Append the value */
         // 进行拼接
         o->ptr = sdscatlen(o->ptr,append->ptr,sdslen(append->ptr));
         totlen = sdslen(o->ptr);
