@@ -377,6 +377,9 @@ typedef struct blockingState {
  * also called ready_keys in every structure representing a Redis database,
  * where we make sure to remember if a given key was already added in the
  * server.ready_keys list. */
+/*
+ * 记录了已就绪 key 和它对应的 db
+ */
 typedef struct readyList {
     redisDb *db;
     robj *key;

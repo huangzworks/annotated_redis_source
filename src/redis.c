@@ -1734,6 +1734,7 @@ int processCommand(redisClient *c) {
         addReply(c,shared.queued);
     } else {
         call(c,REDIS_CALL_FULL);
+        // 每次执行完命令之后，处理所有就绪列表
         if (listLength(server.ready_keys))
             handleClientsBlockedOnLists();
     }
