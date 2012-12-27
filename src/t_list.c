@@ -400,7 +400,7 @@ void pushGenericCommand(redisClient *c, int where) {
     for (j = 2; j < c->argc; j++) {
         c->argv[j] = tryObjectEncoding(c->argv[j]);
         if (!lobj) {
-            lobj = createZiplistObject();
+            lobj = createZiplistObject();   // 默认使用 ziplist 
             dbAdd(c->db,c->argv[1],lobj);
         }
         listTypePush(lobj,c->argv[j],where);
