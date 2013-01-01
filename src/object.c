@@ -42,7 +42,7 @@ robj *createObject(int type, void *ptr) {
 
     // 初始化对象域
     o->type = type;
-    o->encoding = REDIS_ENCODING_RAW;
+    o->encoding = REDIS_ENCODING_RAW;   // 默认编码
     o->ptr = ptr;
     o->refcount = 1;
 
@@ -100,6 +100,7 @@ robj *createStringObjectFromLongDouble(long double value) {
      * that is "non surprising" for the user (that is, most small decimal
      * numbers will be represented in a way that when converted back into
      * a string are exactly the same as what the user typed.) */
+    // 将 long double 值转换为字符串
     len = snprintf(buf,sizeof(buf),"%.17Lf", value);
     /* Now remove trailing zeroes after the '.' */
     if (strchr(buf,'.') != NULL) {
@@ -344,7 +345,7 @@ void decrRefCount(void *obj) {
  *    decrRefCount(obj);
  */
 /*
- * 将对象的引用数设置为 0 ，而不释放该对象
+ * 将对象的引用数设置为 0 ，但不释放该对象
  */
 robj *resetRefCount(robj *obj) {
     obj->refcount = 0;
@@ -380,7 +381,7 @@ int isObjectRepresentableAsLongLong(robj *o, long long *llval) {
 
 /* Try to encode a string object in order to save space */
 /*
- * 尝试对 string 对象进行编码，以节省内存
+ * 尝试将对象 o 编码成整数，并尝试将它加入到共享对象里面
  */
 robj *tryObjectEncoding(robj *o) {
     long value;
@@ -418,6 +419,8 @@ robj *tryObjectEncoding(robj *o) {
         // 如果是的话就用共享对象代替这个对象 o
         decrRefCount(o);
         incrRefCount(shared.integers[value]);
+
+        // 将共享对象返回
         return shared.integers[value];
     } else {
         // value 不属于共享范围，将它保存到对象 o 中
@@ -434,7 +437,7 @@ robj *tryObjectEncoding(robj *o) {
 /*
  * 返回一个对象的未编码版本
  *
- * 如果输入对象是已编码的，那么返回的对象是新创建的
+ * 如果输入对象是已编码的，那么返回的对象是输入对象的新对象副本
  * 如果输入对象是未编码的，那么为它的引用计数增一，然后返回它
  */
 robj *getDecodedObject(robj *o) {
