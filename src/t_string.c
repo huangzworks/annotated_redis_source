@@ -35,7 +35,13 @@
  *----------------------------------------------------------------------------*/
 
 /*
- * 检查字符串大小是否超过限制
+ * 检查长度 size 是否超过 Redis 的最大限制
+ *
+ * 复杂度：O(1)
+ *
+ * 返回值：
+ *  REDIS_ERR   超过
+ *  REDIS_OK    未超过
  */
 static int checkStringLength(redisClient *c, long long size) {
     if (size > 512*1024*1024) {
@@ -46,20 +52,25 @@ static int checkStringLength(redisClient *c, long long size) {
 }
 
 /*
- * 通用 set 命令，用于实现 set / setex / setnx 等命令 
+ * 通用 set 命令，用于 SET / SETEX 和 SETNX 等命令的底层实现
+ *
+ * 参数：
+ *  c   客户端
+ *  nx  如果不为 0 ，那么表示只有在 key 不存在时才进行 set 操作
+ *  key 
+ *  val
+ *  expire  过期时间
+ *  unit    过期时间的单位，分为 UNIT_SECONDS 和 UNIT_MILLISECONDS
+ *
+ * 复杂度：O(1)
+ *
+ * 返回值：void
  */
-void setGenericCommand(
-    redisClient *c,  // 客户端
-    int nx,          // Not eXists 命令？
-    robj *key,       // key
-    robj *val,       // val
-    robj *expire,    // expire 时间
-    int unit         // 过期时间以秒计算？
-)        
+void setGenericCommand(redisClient *c, int nx, robj *key, robj *val, robj *expire, int unit)        
 {
     long long milliseconds = 0; /* initialized to avoid an harmness warning */
 
-    // 如果带有 expire 参数，那么将它从字符串转为 long long 类型
+    // 如果带有 expire 参数，那么将它从 sds 转为 long long 类型
     if (expire) {
         if (getLongLongFromObjectOrReply(c, expire, &milliseconds, NULL) != REDIS_OK)
             return;
@@ -72,39 +83,70 @@ void setGenericCommand(
         if (unit == UNIT_SECONDS) milliseconds *= 1000;
     }
 
-    // 如果给定了 nx 参数，那么只有在 key 不存在时设置才继续
-    // 否则返回 shared.czero ，也即是 0
+    // 如果给定了 nx 参数，并且 key 已经存在，那么直接向客户端返回
     if (nx && lookupKeyWrite(c->db,key) != NULL) {
         addReply(c,shared.czero);
         return;
     }
 
-    // 设置 key-value
+    // 设置 key-value 对
     setKey(c->db,key,val);
+
     server.dirty++;
 
-    // 设置 expire time
+    // 为 key 设置过期时间
     if (expire) setExpire(c->db,key,mstime()+milliseconds);
 
     // 向客户端返回回复
     addReply(c, nx ? shared.cone : shared.ok);
 }
 
+/*
+ * SET 命令的实现
+ *
+ * 复杂度：O(1)
+ *
+ * 返回值：void
+ */
 void setCommand(redisClient *c) {
     c->argv[2] = tryObjectEncoding(c->argv[2]);
     setGenericCommand(c,0,c->argv[1],c->argv[2],NULL,0);
 }
 
+/*
+ * SETNX 命令的实现
+ *
+ * 复杂度：
+ *  O(1)
+ *
+ * 返回值：void
+ */
 void setnxCommand(redisClient *c) {
     c->argv[2] = tryObjectEncoding(c->argv[2]);
     setGenericCommand(c,1,c->argv[1],c->argv[2],NULL,0);
 }
 
+/*
+ * SETEX 命令的实现
+ *
+ * 复杂度：
+ *  O(1)
+ *
+ * 返回值：void
+ */
 void setexCommand(redisClient *c) {
     c->argv[3] = tryObjectEncoding(c->argv[3]);
     setGenericCommand(c,0,c->argv[1],c->argv[3],c->argv[2],UNIT_SECONDS);
 }
 
+/*
+ * PSETEX 命令的实现
+ *
+ * 复杂度：
+ *  O(1)
+ *
+ * 返回值：void
+ */
 void psetexCommand(redisClient *c) {
     c->argv[3] = tryObjectEncoding(c->argv[3]);
     setGenericCommand(c,0,c->argv[1],c->argv[3],c->argv[2],UNIT_MILLISECONDS);
@@ -112,6 +154,14 @@ void psetexCommand(redisClient *c) {
 
 /*
  * 根据客户端指定的 key ，查找相应的值。
+ * 各种 get 命令的底层实现。
+ *
+ * 复杂度：
+ *  O(1)
+ *
+ * 返回值：
+ *  REDIS_OK    查找完成（可能找到，也可能没找到）
+ *  REDIS_ERR   找到，但 key 不是字符串类型
  */
 int getGenericCommand(redisClient *c) {
     robj *o;
@@ -130,19 +180,43 @@ int getGenericCommand(redisClient *c) {
     }
 }
 
+/*
+ * GET 命令的实现
+ *
+ * 复杂度：O(1)
+ *
+ * 返回值：void
+ */
 void getCommand(redisClient *c) {
     getGenericCommand(c);
 }
 
+/*
+ * GETSET 命令的实现
+ *
+ * 复杂度：O(1)
+ *
+ * 返回值：void
+ */
 void getsetCommand(redisClient *c) {
+
     // 获取现有值，并添加到客户端回复 buffer 中
     if (getGenericCommand(c) == REDIS_ERR) return;
+
     // 设置新值
     c->argv[2] = tryObjectEncoding(c->argv[2]);
     setKey(c->db,c->argv[1],c->argv[2]);
+
     server.dirty++;
 }
 
+/*
+ * SETRANGE 命令的实现
+ *
+ * 复杂度：O(N)
+ *
+ * 返回值：void
+ */
 void setrangeCommand(redisClient *c) {
     robj *o;
     long offset;
@@ -150,7 +224,7 @@ void setrangeCommand(redisClient *c) {
     // 用来替换旧内容的字符串
     sds value = c->argv[3]->ptr;
 
-    // 检查 offset 是否为 long 类型值
+    // 将 offset 转换为 long 类型值
     if (getLongFromObjectOrReply(c,c->argv[2],&offset,NULL) != REDIS_OK)
         return;
 
@@ -162,7 +236,6 @@ void setrangeCommand(redisClient *c) {
 
     // 查找给定 key
     o = lookupKeyWrite(c->db,c->argv[1]);
-
     if (o == NULL) {
         // key 不存在 ...
 
@@ -180,7 +253,7 @@ void setrangeCommand(redisClient *c) {
         o = createObject(REDIS_STRING,sdsempty());
         dbAdd(c->db,c->argv[1],o);
     } else {
-        // key 存在 ....
+        // key 存在 ...
 
         size_t olen;
 
@@ -199,7 +272,7 @@ void setrangeCommand(redisClient *c) {
         if (checkStringLength(c,offset+sdslen(value)) != REDIS_OK)
             return;
 
-        // 当 o 是共享对象或者编码对象时，创建一个副本
+        // 当 o 是共享对象或者编码对象时，创建它的一个副本
         if (o->refcount != 1 || o->encoding != REDIS_ENCODING_RAW) {
             robj *decoded = getDecodedObject(o);
             o = createStringObject(decoded->ptr, sdslen(decoded->ptr));
@@ -212,16 +285,25 @@ void setrangeCommand(redisClient *c) {
     if (sdslen(value) > 0) {
         // 先用 0 字节填充整个范围
         o->ptr = sdsgrowzero(o->ptr,offset+sdslen(value));
-        // 复制
+
+        // 复制内容到 key
         memcpy((char*)o->ptr+offset,value,sdslen(value));
+
         signalModifiedKey(c->db,c->argv[1]);
         server.dirty++;
     }
 
-    // 将修改后的字符串的长度返回给客户端
+    // 将修改后字符串的长度返回给客户端
     addReplyLongLong(c,sdslen(o->ptr));
 }
 
+/*
+ * GETRANGE 命令的实现
+ *
+ * 复杂度：O(N)
+ *
+ * 返回值：void
+ */
 void getrangeCommand(redisClient *c) {
     robj *o;
     long start, end;
@@ -236,7 +318,7 @@ void getrangeCommand(redisClient *c) {
     if (getLongFromObjectOrReply(c,c->argv[3],&end,NULL) != REDIS_OK)
         return;
 
-    // 检查 key 是否不存在，或者不为 String 类型
+    // 如果 key 不存在，或者 key 不是字符串类型，那么直接返回
     if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.emptybulk)) == NULL ||
         checkType(c,o,REDIS_STRING)) return;
 
@@ -261,10 +343,18 @@ void getrangeCommand(redisClient *c) {
     if (start > end) {
         addReply(c,shared.emptybulk);
     } else {
+        // 返回字符串给定索引的内容
         addReplyBulkCBuffer(c,(char*)str+start,end-start+1);
     }
 }
 
+/*
+ * MGET 命令的实现
+ *
+ * 复杂度：O(N)
+ *
+ * 返回值：void
+ */
 void mgetCommand(redisClient *c) {
     int j;
 
@@ -284,16 +374,27 @@ void mgetCommand(redisClient *c) {
     }
 }
 
+/*
+ * MSET / MSETNX 命令的底层实现
+ *
+ * 参数：
+ *  nx  如果不为 0 ，那么只有在 key 不存在时才进行设置
+ *
+ * 复杂度：O(N)
+ *
+ * 返回值：void
+ */
 void msetGenericCommand(redisClient *c, int nx) {
     int j, busykeys = 0;
 
+    // 检查输入参数是否成对
     if ((c->argc % 2) == 0) {
         addReplyError(c,"wrong number of arguments for MSET");
         return;
     }
 
-    // 当 NX 选项打开时，检查给定的 key 是否已经存在
-    // 如果任一个 key 存在的话，不进行修改，直接返回 0
+    // 当 nx 选项打开时，检查给定的 key 是否已经存在
+    // 只要任何一个 key 存在，那么就不进行修改，直接返回 0
     if (nx) {
         for (j = 1; j < c->argc; j += 2) {
             if (lookupKeyWrite(c->db,c->argv[j]) != NULL) {
@@ -318,14 +419,36 @@ void msetGenericCommand(redisClient *c, int nx) {
     addReply(c, nx ? shared.cone : shared.ok);
 }
 
+/*
+ * MSET 命令的实现
+ *
+ * 复杂度：O(N)
+ *
+ * 返回值：void
+ */
 void msetCommand(redisClient *c) {
     msetGenericCommand(c,0);
 }
 
+/*
+ * MSETNX 命令的实现
+ *
+ * 复杂度：O(N)
+ *
+ * 返回值：void
+ */
 void msetnxCommand(redisClient *c) {
     msetGenericCommand(c,1);
 }
 
+/*
+ * 对给定字符串保存的数值进行加法或者减法操作
+ * incr / decr / incrby 和 decrby 等命令的底层实现
+ *
+ * 复杂度：O(1)
+ *
+ * 返回值：void
+ */
 void incrDecrCommand(redisClient *c, long long incr) {
     long long value, oldvalue;
     robj *o, *new;
@@ -339,7 +462,7 @@ void incrDecrCommand(redisClient *c, long long incr) {
     // 如果值不能转换为数字，直接返回
     if (getLongLongFromObjectOrReply(c,o,&value,NULL) != REDIS_OK) return;
 
-    // 溢出和值是否会溢出
+    // 检查和值是否会溢出
     oldvalue = value;
     if ((incr < 0 && oldvalue < 0 && incr < (LLONG_MIN-oldvalue)) ||
         (incr > 0 && oldvalue > 0 && incr > (LLONG_MAX-oldvalue))) {
@@ -366,14 +489,35 @@ void incrDecrCommand(redisClient *c, long long incr) {
     addReply(c,shared.crlf);
 }
 
+/*
+ * INCR 命令的实现
+ *
+ * 复杂度：O(1)
+ *
+ * 返回值：void
+ */
 void incrCommand(redisClient *c) {
     incrDecrCommand(c,1);
 }
 
+/*
+ * DECR 命令的实现
+ *
+ * 复杂度：O(1)
+ *
+ * 返回值：void
+ */
 void decrCommand(redisClient *c) {
     incrDecrCommand(c,-1);
 }
 
+/*
+ * incrby 命令的实现
+ *
+ * 复杂度：O(1)
+ *
+ * 返回值：void
+ */
 void incrbyCommand(redisClient *c) {
     long long incr;
 
@@ -383,6 +527,13 @@ void incrbyCommand(redisClient *c) {
     incrDecrCommand(c,incr);
 }
 
+/*
+ * decrby 命令的实现
+ *
+ * 复杂度：O(1)
+ *
+ * 返回值：void
+ */
 void decrbyCommand(redisClient *c) {
     long long incr;
 
@@ -392,6 +543,13 @@ void decrbyCommand(redisClient *c) {
     incrDecrCommand(c,-incr);
 }
 
+/*
+ * INCRBYFLOAT 命令的实现
+ *
+ * 复杂度：O(1)
+ *
+ * 返回值：void
+ */
 void incrbyfloatCommand(redisClient *c) {
     long double incr, value;
     robj *o, *new, *aux;
@@ -399,10 +557,10 @@ void incrbyfloatCommand(redisClient *c) {
     // 获取 key 对象
     o = lookupKeyWrite(c->db,c->argv[1]);
 
-    // 如果对象存在且不为 string 类型，直接返回
+    // 如果对象存在且不为字符串类型，直接返回
     if (o != NULL && checkType(c,o,REDIS_STRING)) return;
 
-    // 如果对象 o 或者传入增量参数不是浮点数，直接返回
+    // 如果对象 o 或者传入增量参数不能转换为浮点数，直接返回
     if (getLongDoubleFromObjectOrReply(c,o,&value,NULL) != REDIS_OK ||
         getLongDoubleFromObjectOrReply(c,c->argv[2],&incr,NULL) != REDIS_OK)
         return;
@@ -415,7 +573,7 @@ void incrbyfloatCommand(redisClient *c) {
         return;
     }
 
-    // 创建并保存新对象
+    // 将值保存到新对象，并覆写原有对象
     new = createStringObjectFromLongDouble(value);
     if (o)
         dbOverwrite(c->db,c->argv[1],new);
@@ -439,6 +597,10 @@ void incrbyfloatCommand(redisClient *c) {
 
 /*
  * APPEND 命令的实现
+ *
+ * 复杂度：O(N)
+ *
+ * 返回值：void
  */
 void appendCommand(redisClient *c) {
     size_t totlen;
@@ -447,23 +609,27 @@ void appendCommand(redisClient *c) {
     // 查找 key 对象
     o = lookupKeyWrite(c->db,c->argv[1]);
     if (o == NULL) {
-        // 对象不存在，创建
+        // 对象不存在 ...
+        
+        // 创建字符串对象，并将它添加到数据库
         c->argv[2] = tryObjectEncoding(c->argv[2]);
         dbAdd(c->db,c->argv[1],c->argv[2]);
         incrRefCount(c->argv[2]);
         totlen = stringObjectLen(c->argv[2]);
     } else {
-        // 对象存在，检查它是否为字符串类型
+        // 对象存在...
+        
+        // 如果不是字符串，直接返回
         if (checkType(c,o,REDIS_STRING))
             return;
 
-        // 检查 append 参数和 key 的字符串的长度是否合法
+        // 检查拼接完成后，字符串的长度是否合法
         append = c->argv[2];
         totlen = stringObjectLen(o) + sdslen(append->ptr);
         if (checkStringLength(c,totlen) != REDIS_OK)
             return;
 
-        // 如果 key 对象是共享或被编码的，那么创建一个副本
+        // 如果 key 对象是被共享或未被编码的，那么创建一个副本
         if (o->refcount != 1 || o->encoding != REDIS_ENCODING_RAW) {
             robj *decoded = getDecodedObject(o);
             o = createStringObject(decoded->ptr, sdslen(decoded->ptr));
@@ -480,6 +646,13 @@ void appendCommand(redisClient *c) {
     addReplyLongLong(c,totlen);
 }
 
+/*
+ * STRLEN 命令的实现
+ *
+ * 复杂度：O(1)
+ *
+ * 返回值：void
+ */
 void strlenCommand(redisClient *c) {
     robj *o;
 

@@ -274,8 +274,9 @@
 #define REDIS_LUA_TIME_LIMIT 5000 /* milliseconds */
 
 /* Units */
-#define UNIT_SECONDS 0
-#define UNIT_MILLISECONDS 1
+// 过期时间的单位
+#define UNIT_SECONDS 0          // 秒
+#define UNIT_MILLISECONDS 1     // 毫秒
 
 /* SHUTDOWN flags */
 #define REDIS_SHUTDOWN_SAVE 1       /* Force SAVE on SHUTDOWN even if no save
@@ -447,22 +448,40 @@ struct sharedObjectsStruct {
 };
 
 /* ZSETs use a specialized version of Skiplists */
+/*
+ * 跳跃表节点
+ */
 typedef struct zskiplistNode {
+    // 保存的对象
     robj *obj;
+    // 点数
     double score;
+    // 前途指针
     struct zskiplistNode *backward;
+    // 层
     struct zskiplistLevel {
+        // 后继节点
         struct zskiplistNode *forward;
+        // 
         unsigned int span;
     } level[];
 } zskiplistNode;
 
+/*
+ * 跳跃表
+ */
 typedef struct zskiplist {
+    // 头节点，尾节点
     struct zskiplistNode *header, *tail;
+    // 长度
     unsigned long length;
+    // 层数目
     int level;
 } zskiplist;
 
+/*
+ * 有序集
+ */
 typedef struct zset {
     dict *dict;
     zskiplist *zsl;
@@ -1070,8 +1089,12 @@ unsigned long aofRewriteBufferSize(void);
 /* Sorted sets data type */
 
 /* Struct to hold a inclusive/exclusive range spec. */
+/*
+ * 用于保存范围值的结构
+ */
 typedef struct {
     double min, max;
+    // min 和 max 是否包括在内？
     int minex, maxex; /* are min or max exclusive? */
 } zrangespec;
 
