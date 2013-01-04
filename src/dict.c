@@ -105,6 +105,8 @@ uint32_t dictGetHashFunctionSeed(void) {
  * 1. It will not work incrementally.
  * 2. It will not produce the same results on little-endian and big-endian
  *    machines.
+ *
+ * 算法的具体信息可以参考 http://code.google.com/p/smhasher/
  */
 unsigned int dictGenHashFunction(const void *key, int len) {
     /* 'm' and 'r' are mixing constants generated offline.
@@ -162,6 +164,8 @@ unsigned int dictGenCaseHashFunction(const unsigned char *buf, int len) {
 
 /*
  * 重置哈希表的各项属性
+ *
+ * T = O(1)
  */
 static void _dictReset(dictht *ht)
 {
@@ -173,6 +177,8 @@ static void _dictReset(dictht *ht)
 
 /*
  * 创建一个新字典
+ *
+ * T = O(1)
  */
 dict *dictCreate(dictType *type,
         void *privDataPtr)
@@ -188,6 +194,8 @@ dict *dictCreate(dictType *type,
 
 /*
  * 初始化字典
+ *
+ * T = O(1)
  */
 int _dictInit(dict *d, dictType *type,
         void *privDataPtr)
@@ -211,6 +219,8 @@ int _dictInit(dict *d, dictType *type,
  * but with the invariant of a USED/BUCKETS ratio near to <= 1 */
 /*
  * 对字典进行紧缩，让节点数/桶数的比率接近 <= 1 。
+ *
+ * T = O(N)
  */
 int dictResize(dict *d)
 {
@@ -234,12 +244,15 @@ int dictResize(dict *d)
  *  
  *   1) 如果字典里的 ht[0] 为空，将新哈希表赋值给它
  *   2) 如果字典里的 ht[0] 不为空，那么将新哈希表赋值给 ht[1] ，并打开 rehash 标识
+ *
+ * T = O(N)
  */
 int dictExpand(dict *d, unsigned long size)
 {
     dictht n; /* the new hash table */
     
     // 计算哈希表的真实大小
+    // O(N)
     unsigned long realsize = _dictNextPower(size);
 
     /* the size is invalid if it is smaller than the number of
@@ -249,6 +262,7 @@ int dictExpand(dict *d, unsigned long size)
 
     /* Allocate the new hash table and initialize all pointers to NULL */
     // 创建并初始化新哈希表
+    // O(N)
     n.size = realsize;
     n.sizemask = realsize-1;
     n.table = zcalloc(realsize*sizeof(dictEntry*));
@@ -280,6 +294,8 @@ int dictExpand(dict *d, unsigned long size)
  *
  * 每步 rehash 都会移动哈希表数组内某个索引上的整个链表节点，
  * 所以从 ht[0] 迁移到 ht[1] 的 key 可能不止一个。
+ *
+ * T = O(N)
  */
 int dictRehash(dict *d, int n) {
     if (!dictIsRehashing(d)) return 0;
@@ -288,6 +304,7 @@ int dictRehash(dict *d, int n) {
         dictEntry *de, *nextde;
 
         // 如果 ht[0] 已经为空，那么迁移完毕
+        // 用 ht[1] 代替原来的 ht[0]
         if (d->ht[0].used == 0) {
 
             // 释放 ht[0] 的哈希表数组
@@ -314,6 +331,8 @@ int dictRehash(dict *d, int n) {
         // 指向链表头
         de = d->ht[0].table[d->rehashidx];
         // 将链表内的所有元素从 ht[0] 迁移到 ht[1]
+        // 因为桶内的元素通常只有一个，或者不多于某个特定比率
+        // 所以可以将这个操作看作 O(1)
         while(de) {
             unsigned int h;
 
@@ -347,6 +366,8 @@ int dictRehash(dict *d, int n) {
 
 /*
  * 以毫秒为单位，返回当前时间
+ *
+ * T = O(1)
  */
 long long timeInMilliseconds(void) {
     struct timeval tv;
@@ -358,6 +379,8 @@ long long timeInMilliseconds(void) {
 /* Rehash for an amount of time between ms milliseconds and ms+1 milliseconds */
 /*
  * 在给定毫秒数内，以 100 步为单位，对字典进行 rehash 。
+ *
+ * T = O(N)，N 为被 rehash 的 key-value 对数量
  */
 int dictRehashMilliseconds(dict *d, int ms) {
     long long start = timeInMilliseconds();
@@ -374,6 +397,8 @@ int dictRehashMilliseconds(dict *d, int ms) {
  * 如果条件允许的话，将一个元素从 ht[0] 迁移至 ht[1]
  *
  * 这个函数被其他查找和更新函数所调用，从而实现渐进式 rehash 。
+ *
+ * T = O(1)
  */
 static void _dictRehashStep(dict *d) {
     // 只在没有安全迭代器的时候，才能进行迁移
@@ -383,6 +408,8 @@ static void _dictRehashStep(dict *d) {
 
 /*
  * 添加给定 key-value 对到字典
+ *
+ * T = O(1)
  */
 int dictAdd(dict *d, void *key, void *val)
 {
@@ -417,6 +444,8 @@ int dictAdd(dict *d, void *key, void *val)
  * 添加 key 到字典的底层实现，完成之后返回新节点。
  *
  * 如果 key 已经存在，返回 NULL 。
+ *
+ * T = O(1)
  */
 dictEntry *dictAddRaw(dict *d, void *key)
 {
@@ -462,6 +491,8 @@ dictEntry *dictAddRaw(dict *d, void *key)
  * 如果 key 不存在，将关联添加到哈希表中。
  *
  * 如果关联是新创建的，返回 1 ，如果关联是被更新的，返回 0 。
+ *
+ * T = O(1)
  */
 int dictReplace(dict *d, void *key, void *val)
 {
@@ -471,11 +502,13 @@ int dictReplace(dict *d, void *key, void *val)
      * does not exists dictAdd will suceed. */
     // 尝试添加新元素到哈希表
     // 只要 key 不存在，添加就会成功。
+    // O(1)
     if (dictAdd(d, key, val) == DICT_OK)
         return 1;
 
     // 如果添加失败，那么说明元素已经存在
     // 获取这个元素所对应的节点
+    // O(1)
     entry = dictFind(d, key);
 
     /* Set the new value and free the old one. Note that it is important
@@ -500,6 +533,8 @@ int dictReplace(dict *d, void *key, void *val)
  * 类似于 dictAddRaw() ，
  * dictReplaceRaw 无论在新添加节点还是更新节点的情况下，
  * 都返回 key 所对应的节点
+ *
+ * T = O(1)
  */
 dictEntry *dictReplaceRaw(dict *d, void *key) {
     // 查找
@@ -511,6 +546,8 @@ dictEntry *dictReplaceRaw(dict *d, void *key) {
 
 /*
  * 按 key 查找并删除节点
+ *
+ * T = O(1)
  */
 static int dictGenericDelete(dict *d, const void *key, int nofree)
 {
@@ -535,6 +572,8 @@ static int dictGenericDelete(dict *d, const void *key, int nofree)
         he = d->ht[table].table[idx];
         prevHe = NULL;
         // 遍历链表
+        // 因为链表的元素数量通常为 1 ，或者维持在一个很小的比率
+        // 因此可以将这个操作看作 O(1)
         while(he) {
             // 对比
             if (dictCompareKeys(d, key, he->key)) {
@@ -569,6 +608,8 @@ static int dictGenericDelete(dict *d, const void *key, int nofree)
 
 /*
  * 删除哈希表中的 key ，并且释放保存这个 key 的节点
+ *
+ * T = O(1)
  */
 int dictDelete(dict *ht, const void *key) {
     return dictGenericDelete(ht,key,0);
@@ -576,6 +617,8 @@ int dictDelete(dict *ht, const void *key) {
 
 /*
  * 删除哈希表中的 key ，但是并不释放保存这个 key 的节点
+ *
+ * T = O(1)
  */
 int dictDeleteNoFree(dict *ht, const void *key) {
     return dictGenericDelete(ht,key,1);
@@ -584,6 +627,8 @@ int dictDeleteNoFree(dict *ht, const void *key) {
 /* Destroy an entire dictionary */
 /*
  * 销毁给定哈希表
+ *
+ * T = O(N)
  */
 int _dictClear(dict *d, dictht *ht)
 {
@@ -596,6 +641,8 @@ int _dictClear(dict *d, dictht *ht)
 
         if ((he = ht->table[i]) == NULL) continue;
         // 释放整个链表上的元素
+        // 因为链表的元素数量通常为 1 ，或者维持在一个很小的比率
+        // 因此可以将这个操作看作 O(1)
         while(he) {
             nextHe = he->next;
 
@@ -621,6 +668,8 @@ int _dictClear(dict *d, dictht *ht)
 
 /*
  * 清空并释放字典
+ *
+ * T = O(N)
  */
 void dictRelease(dict *d)
 {
@@ -634,6 +683,8 @@ void dictRelease(dict *d)
  * 在字典中查找给定 key 所定义的节点
  *
  * 如果 key 不存在，返回 NULL
+ *
+ * T = O(1)
  */
 dictEntry *dictFind(dict *d, const void *key)
 {
@@ -653,6 +704,8 @@ dictEntry *dictFind(dict *d, const void *key)
         // 节点链表
         he = d->ht[table].table[idx];
         // 在链表中查找
+        // 因为链表的元素数量通常为 1 ，或者维持在一个很小的比率
+        // 因此可以将这个操作看作 O(1)
         while(he) {
             // 找到并返回
             if (dictCompareKeys(d, key, he->key))
@@ -673,6 +726,8 @@ dictEntry *dictFind(dict *d, const void *key)
  * 返回在字典中， key 所对应的值 value
  *
  * 如果 key 不存在于字典，那么返回 NULL
+ *
+ * T = O(1)
  */
 void *dictFetchValue(dict *d, const void *key) {
     dictEntry *he;
@@ -684,6 +739,8 @@ void *dictFetchValue(dict *d, const void *key) {
 
 /*
  * 根据给定字典，创建一个不安全迭代器。
+ *
+ * T = O(1)
  */
 dictIterator *dictGetIterator(dict *d)
 {
@@ -701,6 +758,8 @@ dictIterator *dictGetIterator(dict *d)
 
 /*
  * 根据给定字典，创建一个安全迭代器。
+ *
+ * T = O(1)
  */
 dictIterator *dictGetSafeIterator(dict *d) {
     dictIterator *i = dictGetIterator(d);
@@ -713,6 +772,8 @@ dictIterator *dictGetSafeIterator(dict *d) {
  * 返回迭代器指向的当前节点。
  *
  * 如果字典已经迭代完毕，返回 NULL 。
+ *
+ * T = O(1)
  */
 dictEntry *dictNext(dictIterator *iter)
 {
@@ -768,6 +829,8 @@ dictEntry *dictNext(dictIterator *iter)
 
 /*
  * 释放迭代器
+ *
+ * T = O(1)
  */
 void dictReleaseIterator(dictIterator *iter)
 {
@@ -783,6 +846,8 @@ void dictReleaseIterator(dictIterator *iter)
  * 可用于实现随机化算法。
  *
  * 如果字典为空，返回 NULL 。
+ *
+ * T = O(N)
  */
 dictEntry *dictGetRandomKey(dict *d)
 {
@@ -797,6 +862,7 @@ dictEntry *dictGetRandomKey(dict *d)
     if (dictIsRehashing(d)) _dictRehashStep(d);
 
     // 根据哈希表的使用情况，随机从哈希表中挑选一个非空表头
+    // O(N)
     if (dictIsRehashing(d)) {
         do {
             h = random() % (d->ht[0].size+d->ht[1].size);
@@ -816,6 +882,8 @@ dictEntry *dictGetRandomKey(dict *d)
      * select a random index. */
     // 随机获取链表中的其中一个元素
     // 计算链表长度
+    // 因为链表的元素数量通常为 1 或者一个很小的比率
+    // 所以这个操作可以看作是 O(1)
     listlen = 0;
     orighe = he;
     while(he) {
@@ -837,7 +905,10 @@ dictEntry *dictGetRandomKey(dict *d)
 
 /* Expand the hash table if needed */
 /*
+ * 根据需要，扩展字典的大小
+ * （也即是对 ht[0] 进行 rehash）
  *
+ * T = O(N)
  */
 static int _dictExpandIfNeeded(dict *d)
 {
@@ -845,6 +916,7 @@ static int _dictExpandIfNeeded(dict *d)
     if (dictIsRehashing(d)) return DICT_OK;
 
     // 如果哈希表为空，那么将它扩展为初始大小
+    // O(N)
     if (d->ht[0].size == 0) return dictExpand(d, DICT_HT_INITIAL_SIZE);
 
     /* If we reached the 1:1 ratio, and we are allowed to resize the hash
@@ -858,6 +930,7 @@ static int _dictExpandIfNeeded(dict *d)
     //      dict_force_resize_ratio
     // 那么调用 dictExpand 对哈希表进行扩展
     // 扩展的体积至少为已使用节点数的两倍
+    // O(N)
     if (d->ht[0].used >= d->ht[0].size &&
         (dict_can_resize ||
          d->ht[0].used/d->ht[0].size > dict_force_resize_ratio))
@@ -874,6 +947,8 @@ static int _dictExpandIfNeeded(dict *d)
  * 如果 size 小于等于 DICT_HT_INITIAL_SIZE ，
  * 那么返回 DICT_HT_INITIAL_SIZE ，
  * 否则这个值为第一个 >= size 的二次幂。
+ *
+ * T = O(N)
  */
 static unsigned long _dictNextPower(unsigned long size)
 {
@@ -900,6 +975,8 @@ static unsigned long _dictNextPower(unsigned long size)
  *
  * 当正在执行 rehash 的时候，
  * 返回的 index 总是应用于第二个（新的）哈希表
+ *
+ * T = O(1)
  */
 static int _dictKeyIndex(dict *d, const void *key)
 {
@@ -921,6 +998,8 @@ static int _dictKeyIndex(dict *d, const void *key)
         idx = h & d->ht[table].sizemask;
 
         // 在节点链表里查找给定 key
+        // 因为链表的元素数量通常为 1 或者是一个很小的比率
+        // 所以可以将这个操作看作 O(1) 来处理
         he = d->ht[table].table[idx];
         while(he) {
             // key 已经存在
@@ -940,6 +1019,8 @@ static int _dictKeyIndex(dict *d, const void *key)
 
 /*
  * 清空整个字典
+ *
+ * T = O(N)
  */
 void dictEmpty(dict *d) {
     _dictClear(d,&d->ht[0]);
@@ -950,6 +1031,8 @@ void dictEmpty(dict *d) {
 
 /*
  * 打开 rehash 标识
+ *
+ * T = O(1)
  */
 void dictEnableResize(void) {
     dict_can_resize = 1;
@@ -957,6 +1040,8 @@ void dictEnableResize(void) {
 
 /*
  * 关闭 rehash 标识
+ *
+ * T = O(1)
  */
 void dictDisableResize(void) {
     dict_can_resize = 0;
