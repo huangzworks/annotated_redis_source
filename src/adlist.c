@@ -37,15 +37,18 @@
  * 创建一个新列表
  *
  * 创建成功时返回列表，创建失败返回 NULL
+ *
+ * T = O(1)
  */
 list *listCreate(void)
 {
     struct list *list;
 
-    // 内存分配失败
+    // 为列表结构分配内存
     if ((list = zmalloc(sizeof(*list))) == NULL)
         return NULL;
 
+    // 初始化属性
     list->head = list->tail = NULL;
     list->len = 0;
     list->dup = NULL;
@@ -57,6 +60,8 @@ list *listCreate(void)
 
 /*
  * 释放整个列表(以及列表包含的节点)
+ *
+ * T = O(N)，N 为列表的长度
  */
 void listRelease(list *list)
 {
@@ -81,6 +86,8 @@ void listRelease(list *list)
  *
  * 出错时，返回 NULL ，不执行动作。
  * 成功时，返回传入的列表
+ *
+ * T = O(1)
  */
 list *listAddNodeHead(list *list, void *value)
 {
@@ -113,6 +120,8 @@ list *listAddNodeHead(list *list, void *value)
  *
  * 出错时，返回 NULL ，不执行动作。
  * 成功时，返回传入的列表
+ *
+ * T = O(1)
  */
 list *listAddNodeTail(list *list, void *value)
 {
@@ -143,6 +152,8 @@ list *listAddNodeTail(list *list, void *value)
 /*
  * 创建一个包含值 value 的节点
  * 并根据 after 参数的指示，将新节点插入到 old_node 的之前或者之后
+ *
+ * T = O(1)
  */
 list *listInsertNode(list *list, listNode *old_node, void *value, int after) {
     listNode *node;
@@ -187,6 +198,8 @@ list *listInsertNode(list *list, listNode *old_node, void *value, int after) {
 /*
  * 释放列表中给定的节点
  * 清除节点私有值(private value)的工作由调用者完成
+ *
+ * T = O(1)
  */
 void listDelNode(list *list, listNode *node)
 {
@@ -218,6 +231,8 @@ void listDelNode(list *list, listNode *node)
 * 每次对迭代器调用 listNext() ，迭代器就返回列表的下一个节点
 *
 * 这个函数不处理失败情形
+*
+* T = O(1)
 */
 listIter *listGetIterator(list *list, int direction)
 {
@@ -239,6 +254,8 @@ listIter *listGetIterator(list *list, int direction)
 
 /*
  * 释放迭代器 iter
+ *
+ * T = O(1)
  */
 void listReleaseIterator(listIter *iter) {
     zfree(iter);
@@ -246,6 +263,8 @@ void listReleaseIterator(listIter *iter) {
 
 /*
  * 将迭代器 iter 的迭代指针倒回 list 的表头
+ *
+ * T = O(1)
  */
 void listRewind(list *list, listIter *li) {
     li->next = list->head;
@@ -254,6 +273,8 @@ void listRewind(list *list, listIter *li) {
 
 /*
  * 将迭代器 iter 的迭代指针倒回 list 的表尾
+ *
+ * T = O(1)
  */
 void listRewindTail(list *list, listIter *li) {
     li->next = list->tail;
@@ -271,6 +292,8 @@ void listRewindTail(list *list, listIter *li) {
  * while ((node = listNext(iter)) != NULL) {
  *     doSomethingWith(listNodeValue(node));
  * }
+ *
+ * T = O(1)
  */
 listNode *listNext(listIter *iter)
 {
@@ -291,6 +314,8 @@ listNode *listNext(listIter *iter)
  * 复制整个列表，成功返回列表的副本，内存不足而失败时返回 NULL 。
  *
  * 无论复制是成功或失败，输入列表都不会被修改。
+ *
+ * T = O(N)，N 为 orig 列表的长度
  */
 list *listDup(list *orig)
 {
@@ -344,6 +369,8 @@ list *listDup(list *orig)
  *
  * 匹配从表头开始，第一个匹配成功的节点会被返回
  * 如果匹配不成功，返回 NULL 。
+ *
+ * T = O(N)，N 为列表的长度
  */
 listNode *listSearchKey(list *list, void *key)
 {
@@ -380,6 +407,8 @@ listNode *listSearchKey(list *list, void *key)
  * 正数从 0 开始计数，由表头开始；负数从 -1 开始计数，由表尾开始。
  *
  * 如果给定索引超出列表的返回，返回 NULL 。
+ *
+ * T = O(N)，N 为列表的长度
  */
 listNode *listIndex(list *list, long index) {
     listNode *n;
@@ -398,6 +427,8 @@ listNode *listIndex(list *list, long index) {
 
 /*
  * 取出列表的尾节点，将它插入到表头，成为新的表头节点
+ *
+ * T = O(1)
  */
 void listRotate(list *list) {
     listNode *tail = list->tail;
