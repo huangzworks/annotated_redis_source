@@ -1077,7 +1077,7 @@ unsigned char *ziplistIndex(unsigned char *zl, int index) {
  * 返回指向 p 的下一个节点的指针，
  * 如果 p 已经到达表尾，那么返回 NULL 。
  *
- * 复杂度：O(N)
+ * 复杂度：O(1)
  */
 unsigned char *ziplistNext(unsigned char *zl, unsigned char *p) {
     ((void) zl);
@@ -1089,7 +1089,7 @@ unsigned char *ziplistNext(unsigned char *zl, unsigned char *p) {
         return NULL;
     }
 
-    // 指向下一节点
+    // 指向下一节点，O(1)
     p += zipRawEntryLength(p);
     if (p[0] == ZIP_END) {
         return NULL;
