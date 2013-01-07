@@ -358,11 +358,20 @@ typedef struct multiState {
     int count;              /* Total number of MULTI commands */
 } multiState;
 
+/*
+ * 记录客户端的阻塞状态
+ */
 typedef struct blockingState {
+    // 阻塞客户端的任意多个 key
     dict *keys;             /* The keys we are waiting to terminate a blocking
                              * operation such as BLPOP. Otherwise NULL. */
+    // 超时时间
+    // 如果 UNIX 的当前时间大于等于这个值的话，
+    // 那么取消对客户端的阻塞
     time_t timeout;         /* Blocking operation timeout. If UNIX current time
                              * is >= timeout then the operation timed out. */
+    // 在阻塞被取消时接受元素的 key
+    // 只用于 BRPOPLPUSH 命令
     robj *target;           /* The key that should receive the element,
                              * for BRPOPLPUSH. */
 } blockingState;
@@ -415,6 +424,7 @@ typedef struct redisClient {
     off_t repldbsize;       /* replication DB file size */
     int slave_listening_port; /* As configured with: SLAVECONF listening-port */
     multiState mstate;      /* MULTI/EXEC state */
+    // 阻塞状态
     blockingState bpop;   /* blocking state */
     list *io_keys;          /* Keys this client is waiting to be loaded from the
                              * swap file in order to continue. */
@@ -783,6 +793,7 @@ struct redisServer {
     int maxmemory_samples;          /* Pricision of random sampling */
     /* Blocked clients */
     unsigned int bpop_blocked_clients; /* Number of clients blocked by lists */
+    // 要在下一次事件 lopp 前取消阻塞的所有客户端
     list *unblocked_clients; /* list of clients to unblock before next loop */
     list *ready_keys;        /* List of readyList structures for BLPOP & co */
     /* Sort parameters - qsort_r() is only available under BSD so we

@@ -750,6 +750,7 @@ int clientsCronHandleTimeout(redisClient *c) {
         freeClient(c);
         return 1;
     } else if (c->flags & REDIS_BLOCKED) {
+        // 返回空白回复给阻塞超时的客户端
         if (c->bpop.timeout != 0 && c->bpop.timeout < now) {
             addReply(c,shared.nullmultibulk);
             unblockClientWaitingData(c);
