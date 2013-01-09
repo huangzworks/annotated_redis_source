@@ -40,6 +40,8 @@ void sunionDiffGenericCommand(redisClient *c, robj **setkeys, int setnum, robj *
  * hash table. */
 /*
  * 根据给定值 value ，决定是创建 intset 编码还是字典编码的集合
+ *
+ * T = O(1)
  */
 robj *setTypeCreate(robj *value) {
     if (isObjectRepresentableAsLongLong(value,NULL) == REDIS_OK)
@@ -49,21 +51,23 @@ robj *setTypeCreate(robj *value) {
 
 /*
  * 多态添加操作
+ *
+ * T = O(N)
  */
 int setTypeAdd(robj *subject, robj *value) {
     long long llval;
-    // subject 为字典
+    // subject 为字典,O(1)
     if (subject->encoding == REDIS_ENCODING_HT) {
         if (dictAdd(subject->ptr,value,NULL) == DICT_OK) {
             incrRefCount(value);
             return 1;
         }
-    // subject 为intset 
+    // subject 为intset , O(N)
     } else if (subject->encoding == REDIS_ENCODING_INTSET) {
         // value 可以表示为 long long 类型
         if (isObjectRepresentableAsLongLong(value,&llval) == REDIS_OK) {
             uint8_t success = 0;
-            // 添加值
+            // 添加值, O(N)
             subject->ptr = intsetAdd(subject->ptr,llval,&success);
             // 添加成功
             if (success) {
@@ -95,13 +99,16 @@ int setTypeAdd(robj *subject, robj *value) {
 
 /*
  * 多态删除操作
+ *
+ * T = O(N)
  */
 int setTypeRemove(robj *setobj, robj *value) {
     long long llval;
-    // 字典编码
+    // 字典编码, O(N)
     if (setobj->encoding == REDIS_ENCODING_HT) {
+        // O(1)
         if (dictDelete(setobj->ptr,value) == DICT_OK) {
-            // 如果有需要，缩小字典
+            // 如果有需要，缩小字典, O(N)
             if (htNeedsResize(setobj->ptr)) dictResize(setobj->ptr);
             return 1;
         }
@@ -111,6 +118,7 @@ int setTypeRemove(robj *setobj, robj *value) {
         // 那么尝试在 intset 删除它 
         if (isObjectRepresentableAsLongLong(value,&llval) == REDIS_OK) {
             int success;
+            // O(N)
             setobj->ptr = intsetRemove(setobj->ptr,llval,&success);
             if (success) return 1;
         }
@@ -122,17 +130,21 @@ int setTypeRemove(robj *setobj, robj *value) {
 
 /*
  * 多态成员检查操作
+ *
+ * T = O(lg N)
  */
 int setTypeIsMember(robj *subject, robj *value) {
     long long llval;
 
     // 字典
     if (subject->encoding == REDIS_ENCODING_HT) {
+        // O(1)
         return dictFind((dict*)subject->ptr,value) != NULL;
 
     // intset
     } else if (subject->encoding == REDIS_ENCODING_INTSET) {
         if (isObjectRepresentableAsLongLong(value,&llval) == REDIS_OK) {
+            // O(lg N)
             return intsetFind((intset*)subject->ptr,llval);
         }
 
@@ -145,6 +157,8 @@ int setTypeIsMember(robj *subject, robj *value) {
 
 /*
  * 创建一个多态迭代器
+ *
+ * T = O(1)
  */
 setTypeIterator *setTypeInitIterator(robj *subject) {
     setTypeIterator *si = zmalloc(sizeof(setTypeIterator));
@@ -165,6 +179,8 @@ setTypeIterator *setTypeInitIterator(robj *subject) {
 
 /*
  * 释放多态迭代器
+ *
+ * T = O(1)
  */
 void setTypeReleaseIterator(setTypeIterator *si) {
     if (si->encoding == REDIS_ENCODING_HT)
@@ -189,6 +205,8 @@ void setTypeReleaseIterator(setTypeIterator *si) {
  * robj 参数保存字典编码的值， llele 参数保存 intset 保存的值
  *
  * 返回值指示到底哪种编码的值被取出了，返回 -1 表示集合为空
+ *
+ * T = O(1)
  */
 int setTypeNext(setTypeIterator *si, robj **objele, int64_t *llele) {
 
@@ -216,6 +234,8 @@ int setTypeNext(setTypeIterator *si, robj **objele, int64_t *llele) {
 /*
  * 获取迭代器的当前元素，并返回包含它的一个对象。
  * 如果调用者不使用这个对象的话，必须在使用完毕之后释放它。
+ *
+ * T = O(1)
  */
 robj *setTypeNextObject(setTypeIterator *si) {
     int64_t intele;
@@ -256,16 +276,21 @@ robj *setTypeNextObject(setTypeIterator *si) {
  * objele 保存字典编码的值， llele 保存 intset 编码的值
  *
  * 返回值指示到底那种编码的值被保存了。
+ *
+ * T = O(N)
  */
 int setTypeRandomElement(robj *setobj, robj **objele, int64_t *llele) {
 
     // 字典
     if (setobj->encoding == REDIS_ENCODING_HT) {
+        // O(N)
         dictEntry *de = dictGetRandomKey(setobj->ptr);
+        // O(1)
         *objele = dictGetKey(de);
 
     // intset
     } else if (setobj->encoding == REDIS_ENCODING_INTSET) {
+        // O(1)
         *llele = intsetRandom(setobj->ptr);
 
     } else {
@@ -277,6 +302,8 @@ int setTypeRandomElement(robj *setobj, robj **objele, int64_t *llele) {
 
 /*
  * 多态元素个数返回函数
+ *
+ * T = O(1)
  */
 unsigned long setTypeSize(robj *subject) {
     // 字典
@@ -299,6 +326,8 @@ unsigned long setTypeSize(robj *subject) {
  * 将集合对象 setobj 转换为 enc 指定的编码
  *
  * 目前只支持将 intset 转换为 HT 编码
+ *
+ * T = O(N)
  */
 void setTypeConvert(robj *setobj, int enc) {
     setTypeIterator *si;
@@ -311,9 +340,11 @@ void setTypeConvert(robj *setobj, int enc) {
         robj *element;
 
         /* Presize the dict to avoid rehashing */
+        // O(N)
         dictExpand(d,intsetLen(setobj->ptr));
 
         /* To add the elements we extract integers and create redis objects */
+        // O(N)
         si = setTypeInitIterator(setobj);
         while (setTypeNext(si,NULL,&intele) != -1) {
             element = createStringObjectFromLongLong(intele);
@@ -329,6 +360,9 @@ void setTypeConvert(robj *setobj, int enc) {
     }
 }
 
+/*
+ * T = O(N^2)
+ */
 void saddCommand(redisClient *c) {
     robj *set;
     int j, added = 0;
@@ -336,7 +370,7 @@ void saddCommand(redisClient *c) {
     // 查找集合对象
     set = lookupKeyWrite(c->db,c->argv[1]);
 
-    // 没找到，创建一个空集合
+    // 没找到，创建一个空集合, O(1)
     if (set == NULL) {
         set = setTypeCreate(c->argv[2]);
         dbAdd(c->db,c->argv[1],set);
@@ -349,6 +383,7 @@ void saddCommand(redisClient *c) {
     }
 
     // 将所有输入元素添加到集合
+    // O(N^2)
     for (j = 2; j < c->argc; j++) {
         c->argv[j] = tryObjectEncoding(c->argv[j]);
         if (setTypeAdd(set,c->argv[j])) added++;
@@ -362,6 +397,9 @@ void saddCommand(redisClient *c) {
     addReplyLongLong(c,added);
 }
 
+/*
+ * T = O(N^2)
+ */
 void sremCommand(redisClient *c) {
     robj *set;
     int j, deleted = 0;
@@ -370,7 +408,7 @@ void sremCommand(redisClient *c) {
     if ((set = lookupKeyWriteOrReply(c,c->argv[1],shared.czero)) == NULL ||
         checkType(c,set,REDIS_SET)) return;
 
-    // 移除多个元素
+    // 移除多个元素, O(N^2)
     for (j = 2; j < c->argc; j++) {
         if (setTypeRemove(set,c->argv[j])) {
             deleted++;
@@ -390,6 +428,9 @@ void sremCommand(redisClient *c) {
     addReplyLongLong(c,deleted);
 }
 
+/*
+ * T = O(N)
+ */
 void smoveCommand(redisClient *c) {
     robj *srcset, *dstset, *ele;
 
@@ -423,6 +464,7 @@ void smoveCommand(redisClient *c) {
 
     /* If the element cannot be removed from the src set, return 0. */
     // 从源集合中删除目标元素
+    // O(N)
     if (!setTypeRemove(srcset,ele)) {
         addReply(c,shared.czero);
         return;
@@ -439,6 +481,7 @@ void smoveCommand(redisClient *c) {
 
     /* Create the destination set when it doesn't exist */
     // 如果目标集合不存在，创建一个新的
+    // O(1)
     if (!dstset) {
         dstset = setTypeCreate(ele);
         dbAdd(c->db,c->argv[2],dstset);
@@ -446,11 +489,15 @@ void smoveCommand(redisClient *c) {
 
     /* An extra key has changed when ele was successfully added to dstset */
     // 将目标元素添加到集合
+    // O(N)
     if (setTypeAdd(dstset,ele)) server.dirty++;
 
     addReply(c,shared.cone);
 }
 
+/*
+ * T = O(lg N)
+ */
 void sismemberCommand(redisClient *c) {
     robj *set;
     
@@ -461,13 +508,16 @@ void sismemberCommand(redisClient *c) {
     // 对输入元素进行编码
     c->argv[2] = tryObjectEncoding(c->argv[2]);
 
-    // 返回结果
+    // 返回结果, O(lg N)
     if (setTypeIsMember(set,c->argv[2]))
         addReply(c,shared.cone);
     else
         addReply(c,shared.czero);
 }
 
+/*
+ * T = O(1)
+ */
 void scardCommand(redisClient *c) {
     robj *o;
 
@@ -475,10 +525,13 @@ void scardCommand(redisClient *c) {
     if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.czero)) == NULL ||
         checkType(c,o,REDIS_SET)) return;
 
-    // 返回 size
+    // 返回 size ,O(1)
     addReplyLongLong(c,setTypeSize(o));
 }
 
+/*
+ * T = O(N)
+ */
 void spopCommand(redisClient *c) {
     robj *set, *ele, *aux;
     int64_t llele;
@@ -489,18 +542,20 @@ void spopCommand(redisClient *c) {
         checkType(c,set,REDIS_SET)) return;
 
     // 在多态函数中获取一个对象或者一个 long long 值
+    // O(N)
     encoding = setTypeRandomElement(set,&ele,&llele);
 
     // 根据返回值判断那个指针保存了元素
     if (encoding == REDIS_ENCODING_INTSET) {
         // 复制元素作为返回值
         ele = createStringObjectFromLongLong(llele);
-        // 删除 intset 中的元素
+        // 删除 intset 中的元素, O(N)
         set->ptr = intsetRemove(set->ptr,llele,NULL);
     } else {
         // 为元素的计数增一，以返回它
         incrRefCount(ele);
         // 删除字典中原有的元素
+        // O(1)
         setTypeRemove(set,ele);
     }
 
@@ -526,6 +581,8 @@ void spopCommand(redisClient *c) {
 
 /*
  * 带 count 参数的 SRANDMEMBER 命令的实现
+ *
+ * T = O(N^2)
  */
 void srandmemberWithCountCommand(redisClient *c) {
     long l;
@@ -549,7 +606,7 @@ void srandmemberWithCountCommand(redisClient *c) {
         uniq = 0;
     }
 
-    // 查找对象，检查类型
+    // 查找对象，检查类型, O(1)
     if ((set = lookupKeyReadOrReply(c,c->argv[1],shared.emptymultibulk))
         == NULL || checkType(c,set,REDIS_SET)) return;
     size = setTypeSize(set);
@@ -568,7 +625,9 @@ void srandmemberWithCountCommand(redisClient *c) {
     // 返回 count 个元素，元素可以有重复
     if (!uniq) {
         addReplyMultiBulkLen(c,count);
+        // O(N^2)
         while(count--) {
+            // O(N)
             encoding = setTypeRandomElement(set,&ele,&llele);
             if (encoding == REDIS_ENCODING_INTSET) {
                 addReplyBulkLongLong(c,llele);
@@ -582,14 +641,15 @@ void srandmemberWithCountCommand(redisClient *c) {
     /* CASE 2:
      * The number of requested elements is greater than the number of
      * elements inside the set: simply return the whole set. */
-    // count 大于集合基数，整个返回
+    // count 大于集合基数，返回整个集合
     if (count >= size) {
+        // O(N^2)
         sunionDiffGenericCommand(c,c->argv,c->argc-1,NULL,REDIS_OP_UNION);
         return;
     }
 
     /* For CASE 3 and CASE 4 we need an auxiliary dictionary. */
-    // CASE 3 和 CASE 4 使用字典保存结果
+    // CASE 3 和 CASE 4 使用字典保存结果, O(1)
     d = dictCreate(&setDictType,NULL);
 
     /* CASE 3:
@@ -610,6 +670,7 @@ void srandmemberWithCountCommand(redisClient *c) {
 
         /* Add all the elements into the temporary dictionary. */
         // 拷贝整个集合
+        // O(N)
         si = setTypeInitIterator(set);
         while((encoding = setTypeNext(si,&ele,&llele)) != -1) {
             int retval;
@@ -629,9 +690,11 @@ void srandmemberWithCountCommand(redisClient *c) {
 
         /* Remove random elements to reach the right count. */
         // 随机删除元素直到 size == count 为止
+        // O(N^2)
         while(size > count) {
             dictEntry *de;
 
+            // O(N)
             de = dictGetRandomKey(d);
             dictDelete(d,dictGetKey(de));
             size--;
@@ -646,8 +709,10 @@ void srandmemberWithCountCommand(redisClient *c) {
     else {
         unsigned long added = 0;
 
+        // O(N^2)
         while(added < count) {
 
+            // O(N)
             encoding = setTypeRandomElement(set,&ele,&llele);
 
             if (encoding == REDIS_ENCODING_INTSET) {
@@ -661,6 +726,7 @@ void srandmemberWithCountCommand(redisClient *c) {
             /* Try to add the object to the dictionary. If it already exists
              * free it, otherwise increment the number of objects we have
              * in the result dictionary. */
+            // O(1)
             if (dictAdd(d,ele,NULL) == DICT_OK)
                 added++;
             else
@@ -669,6 +735,7 @@ void srandmemberWithCountCommand(redisClient *c) {
     }
 
     /* CASE 3 & 4: send the result to the user. */
+    // O(N)
     {
         dictIterator *di;
         dictEntry *de;
@@ -684,6 +751,8 @@ void srandmemberWithCountCommand(redisClient *c) {
 
 /*
  * 返回集合中的单个随机元素
+ *
+ * T = O(N)
  */
 void srandmemberCommand(redisClient *c) {
     robj *set, *ele;
@@ -703,6 +772,7 @@ void srandmemberCommand(redisClient *c) {
         checkType(c,set,REDIS_SET)) return;
 
     // 获取随机元素
+    // O(N)
     encoding = setTypeRandomElement(set,&ele,&llele);
     if (encoding == REDIS_ENCODING_INTSET) {
         addReplyBulkLongLong(c,llele);
@@ -713,6 +783,8 @@ void srandmemberCommand(redisClient *c) {
 
 /*
  * 对比两个集合的基数
+ *
+ * T = O(1)
  */
 int qsortCompareSetsByCardinality(const void *s1, const void *s2) {
     return setTypeSize(*(robj**)s1)-setTypeSize(*(robj**)s2);
@@ -722,6 +794,8 @@ int qsortCompareSetsByCardinality(const void *s1, const void *s2) {
  * be handled as empty sets. */
 /*
  * 对比两个集合的基数是否相同
+ *
+ * T = O(1)
  */
 int qsortCompareSetsByRevCardinality(const void *s1, const void *s2) {
     robj *o1 = *(robj**)s1, *o2 = *(robj**)s2;
@@ -730,10 +804,10 @@ int qsortCompareSetsByRevCardinality(const void *s1, const void *s2) {
 }
 
 /*
- *
+ * T = O(N^2 lg N)
  */
 void sinterGenericCommand(redisClient *c, robj **setkeys, unsigned long setnum, robj *dstkey) {
-    // 分配指针空间
+    // 分配指针数组，数量等于 setnum
     robj **sets = zmalloc(sizeof(robj*)*setnum);
     // 集合迭代器
     setTypeIterator *si;
@@ -745,6 +819,7 @@ void sinterGenericCommand(redisClient *c, robj **setkeys, unsigned long setnum, 
     int encoding;
 
     // 将所有集合对象指针保存到 sets 数组
+    // O(N)
     for (j = 0; j < setnum; j++) {
         robj *setobj = dstkey ?
             lookupKeyWrite(c->db,setkeys[j]) :
@@ -771,7 +846,8 @@ void sinterGenericCommand(redisClient *c, robj **setkeys, unsigned long setnum, 
 
     /* Sort sets from the smallest to largest, this will improve our
      * algorithm's performace */
-    // 按基数从小到大排序集合
+    // 按集合的基数从小到大排序集合
+    // O(N^2)
     qsort(sets,setnum,sizeof(robj*),qsortCompareSetsByCardinality);
 
     /* The first thing we should output is the total number of elements...
@@ -792,12 +868,14 @@ void sinterGenericCommand(redisClient *c, robj **setkeys, unsigned long setnum, 
      * not include the element it is discarded */
     // 取出 sets[0] 的元素，和其他元素进行交集操作，
     // 只要某个集合有一个不包含 sets[0] 的元素，
-    // 那么交集失败
+    // 那么这个元素就不被包含在交集结果集里面
+
     // 创建迭代器
     si = setTypeInitIterator(sets[0]);
-    // 遍历 sets[0]
+    // 遍历 sets[0] , O(N^2 lg N)
     while((encoding = setTypeNext(si,&eleobj,&intobj)) != -1) {
         // 和其他集合做交集操作
+        // O(N lg N)
         for (j = 1; j < setnum; j++) {
             // 跳过相同的集合
             if (sets[j] == sets[0]) continue;
@@ -805,6 +883,7 @@ void sinterGenericCommand(redisClient *c, robj **setkeys, unsigned long setnum, 
             // sets[0] 是 intset 时。。。
             if (encoding == REDIS_ENCODING_INTSET) {
                 /* intset with intset is simple... and fast */
+                // O(lg N)
                 if (sets[j]->encoding == REDIS_ENCODING_INTSET &&
                     !intsetFind((intset*)sets[j]->ptr,intobj))
                 {
@@ -814,6 +893,7 @@ void sinterGenericCommand(redisClient *c, robj **setkeys, unsigned long setnum, 
                  * for this */
                 } else if (sets[j]->encoding == REDIS_ENCODING_HT) {
                     eleobj = createStringObjectFromLongLong(intobj);
+                    // O(1)
                     if (!setTypeIsMember(sets[j],eleobj)) {
                         decrRefCount(eleobj);
                         break;
@@ -896,6 +976,9 @@ void sinterstoreCommand(redisClient *c) {
 #define REDIS_OP_DIFF 1
 #define REDIS_OP_INTER 2
 
+/*
+ * T = O(N^2)
+ */
 void sunionDiffGenericCommand(redisClient *c, robj **setkeys, int setnum, robj *dstkey, int op) {
     // 集合指针数组
     robj **sets = zmalloc(sizeof(robj*)*setnum);
@@ -906,6 +989,7 @@ void sunionDiffGenericCommand(redisClient *c, robj **setkeys, int setnum, robj *
     int diff_algo = 1;
 
     // 收集所有集合对象指针
+    // O(N)
     for (j = 0; j < setnum; j++) {
         robj *setobj = dstkey ?
             lookupKeyWrite(c->db,setkeys[j]) :
@@ -930,6 +1014,7 @@ void sunionDiffGenericCommand(redisClient *c, robj **setkeys, int setnum, robj *
      * the sets.
      *
      * We compute what is the best bet with the current input here. */
+    // 根据集合的大小选择恰当的算法
     if (op == REDIS_OP_DIFF && sets[0]) {
         long long algo_one_work = 0, algo_two_work = 0;
 
@@ -938,7 +1023,7 @@ void sunionDiffGenericCommand(redisClient *c, robj **setkeys, int setnum, robj *
 
             // 计算 N * M
             algo_one_work += setTypeSize(sets[0]);
-            // 计算 total number of elements in all the sets 
+            // 计算所有集合的总大小
             algo_two_work += setTypeSize(sets[j]);
         }
 
