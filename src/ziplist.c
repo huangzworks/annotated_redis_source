@@ -1131,6 +1131,13 @@ unsigned char *ziplistPrev(unsigned char *zl, unsigned char *p) {
 /*
  * 获取 p 所指向的节点，并将相关属性保存至指针
  *
+ * 如果节点保存的是字符串值，那么将 sstr 指针指向它，
+ * slen 设在为字符串的长度。
+ *
+ * 如果节点保存的是数字值，那么用 sval 保存它。
+ *
+ * p 为表尾时返回 0 ，否则返回 1 。
+ *
  * 复杂度：O(1)
  */
 unsigned int ziplistGet(unsigned char *p, unsigned char **sstr, unsigned int *slen, long long *sval) {
@@ -1210,7 +1217,7 @@ unsigned char *ziplistDeleteRange(unsigned char *zl, unsigned int index, unsigne
  * 将 p 所指向的节点的属性和 sstr 以及 slen 进行对比，
  * 如果相等则返回 1 。
  *
- * 复杂度：O(1)
+ * 复杂度：O(N)
  */
 unsigned int ziplistCompare(unsigned char *p, unsigned char *sstr, unsigned int slen) {
     zlentry entry;
@@ -1226,6 +1233,7 @@ unsigned int ziplistCompare(unsigned char *p, unsigned char *sstr, unsigned int 
     if (ZIP_IS_STR(entry.encoding)) {
         /* Raw compare */
         if (entry.len == slen) {
+            // O(N)
             return memcmp(p+entry.headersize,sstr,slen) == 0;
         } else {
             return 0;
