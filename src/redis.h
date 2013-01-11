@@ -466,13 +466,13 @@ typedef struct zskiplistNode {
     robj *obj;
     // 点数
     double score;
-    // 前途指针
+    // 后退指针
     struct zskiplistNode *backward;
     // 层
     struct zskiplistLevel {
-        // 后继节点
+        // 前进指针
         struct zskiplistNode *forward;
-        // 
+        // 这个层跨越的节点数量
         unsigned int span;
     } level[];
 } zskiplistNode;
@@ -483,9 +483,9 @@ typedef struct zskiplistNode {
 typedef struct zskiplist {
     // 头节点，尾节点
     struct zskiplistNode *header, *tail;
-    // 长度
+    // 节点数量
     unsigned long length;
-    // 层数目
+    // 目前表内节点的最大层数
     int level;
 } zskiplist;
 
@@ -493,7 +493,9 @@ typedef struct zskiplist {
  * 有序集
  */
 typedef struct zset {
+    // 字典
     dict *dict;
+    // 跳跃表
     zskiplist *zsl;
 } zset;
 
