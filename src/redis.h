@@ -347,14 +347,25 @@ typedef struct redisDb {
 } redisDb;
 
 /* Client MULTI/EXEC state */
+/*
+ * 事务命令结构
+ */
 typedef struct multiCmd {
+    // 执行命令的所有 key 对象
     robj **argv;
+    // 参数的数量
     int argc;
+    // 被执行的命令
     struct redisCommand *cmd;
 } multiCmd;
 
+/*
+ * 事务状态结构
+ */
 typedef struct multiState {
+    // 数组，保存着所有在事务队列中的命令
     multiCmd *commands;     /* Array of MULTI commands */
+    // 队列中命令的数量
     int count;              /* Total number of MULTI commands */
 } multiState;
 
