@@ -582,23 +582,35 @@ dictType migrateCacheDictType = {
     NULL                        /* val destructor */
 };
 
+/*
+ * 返回字典的可用节点数/已有节点数的比率
+ */
 int htNeedsResize(dict *dict) {
     long long size, used;
 
+    // 已用节点数
     size = dictSlots(dict);
+    // 可用节点数
     used = dictSize(dict);
+    // 返回使用比率
     return (size && used && size > DICT_HT_INITIAL_SIZE &&
             (used*100/size < REDIS_HT_MINFILL));
 }
 
 /* If the percentage of used slots in the HT reaches REDIS_HT_MINFILL
  * we resize the hash table to save memory */
+/*
+ * 如果字典的使用空间低于 REDIS_HT_MINFILL 
+ * 那么对字典的大小进行缩小
+ */
 void tryResizeHashTables(void) {
     int j;
 
     for (j = 0; j < server.dbnum; j++) {
+        // 缩小 key space
         if (htNeedsResize(server.db[j].dict))
             dictResize(server.db[j].dict);
+        // 缩小 expire space
         if (htNeedsResize(server.db[j].expires))
             dictResize(server.db[j].expires);
     }
@@ -608,6 +620,9 @@ void tryResizeHashTables(void) {
  * we write/read from the hash table. Still if the server is idle, the hash
  * table will use two tables for a long time. So we try to use 1 millisecond
  * of CPU time at every serverCron() loop in order to rehash some key. */
+/*
+ * 在 Redis Cron 中调用，对数据库 key space 进行渐进式 rehash
+ */
 void incrementallyRehash(void) {
     int j;
 
