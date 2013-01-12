@@ -95,7 +95,7 @@ void queueMultiCommand(redisClient *c) {
 /*
  * 放弃事务，清理并重置客户端的事务状态
  *
- * T = O(N)
+ * T = O(N^2)
  */
 void discardTransaction(redisClient *c) {
     // 释放参数空间
@@ -104,7 +104,7 @@ void discardTransaction(redisClient *c) {
     initClientMultiState(c);
     // 关闭相关的 flag
     c->flags &= ~(REDIS_MULTI|REDIS_DIRTY_CAS|REDIS_DIRTY_EXEC);;
-    // 取消所有 key 的监视
+    // 取消所有 key 的监视, O(N^2)
     unwatchAllKeys(c);
 }
 
@@ -278,18 +278,36 @@ handle_monitor:
  * WATCHing those keys, so that given a key that is going to be modified
  * we can mark all the associated clients as dirty.
  *
+ * 实现为每个 DB 准备一个字典（哈希表），字典的键为该数据库被 WATCHED 的 key
+ * 而字典的值是一个链表，保存了所有监视这个 key 的客户端
+ * 一旦某个 key 被修改，程序会将整个链表的所有客户端都设置为被污染
+ *
  * Also every client contains a list of WATCHed keys so that's possible to
- * un-watch such keys when the client is freed or when UNWATCH is called. */
+ * un-watch such keys when the client is freed or when UNWATCH is called. 
+ *
+ * 此外，客户端还维持这一个保存所有 WATCH key 的链表，
+ * 这样就可以在事务执行或者 UNWATCH 调用时，一次清除所有 WATCH key 。
+ */
 
 /* In the client->watched_keys list we need to use watchedKey structures
  * as in order to identify a key in Redis we need both the key name and the
  * DB */
+/*
+ * 被监视的 key 的资料
+ */
 typedef struct watchedKey {
+    // 被监视的 key
     robj *key;
+    // key 所在的数据库
     redisDb *db;
 } watchedKey;
 
 /* Watch for the specified key */
+/*
+ * 监视给定 key
+ *
+ * T = O(N)
+ */
 void watchForKey(redisClient *c, robj *key) {
     list *clients = NULL;
     listIter li;
@@ -297,13 +315,21 @@ void watchForKey(redisClient *c, robj *key) {
     watchedKey *wk;
 
     /* Check if we are already watching for this key */
+    // 检查该 key 是否已经被 WATCH 
+    // （出现在 WATCH 命令调用时一个 key 被输入多次的情况）
+    // 如果是的话，直接返回
+    // O(N)
     listRewind(c->watched_keys,&li);
     while((ln = listNext(&li))) {
         wk = listNodeValue(ln);
         if (wk->db == c->db && equalStringObjects(key,wk->key))
             return; /* Key already watched */
     }
+
+    // key 未被监视
+    // 根据 key ，将客户端加入到 DB 的监视 key 字典中
     /* This key is not already watched in this DB. Let's add it */
+    // O(1)
     clients = dictFetchValue(c->db->watched_keys,key);
     if (!clients) { 
         clients = listCreate();
@@ -311,7 +337,10 @@ void watchForKey(redisClient *c, robj *key) {
         incrRefCount(key);
     }
     listAddNodeTail(clients,c);
+
+    // 将 key 添加到客户端的监视列表中
     /* Add the new key to the lits of keys watched by this client */
+    // O(1)
     wk = zmalloc(sizeof(*wk));
     wk->key = key;
     wk->db = c->db;
@@ -321,11 +350,21 @@ void watchForKey(redisClient *c, robj *key) {
 
 /* Unwatch all the keys watched by this client. To clean the EXEC dirty
  * flag is up to the caller. */
+/*
+ * 取消所有该客户端监视的 key 
+ * 对事务状态的清除由调用者执行
+ *
+ * T = O(N^2)
+ */
 void unwatchAllKeys(redisClient *c) {
     listIter li;
     listNode *ln;
 
+    // 没有键被 watch ，直接返回
     if (listLength(c->watched_keys) == 0) return;
+
+    // 从客户端以及 DB 中删除所有监视 key 和客户端的资料
+    // O(N^2)
     listRewind(c->watched_keys,&li);
     while((ln = listNext(&li))) {
         list *clients;
@@ -333,15 +372,22 @@ void unwatchAllKeys(redisClient *c) {
 
         /* Lookup the watched key -> clients list and remove the client
          * from the list */
+        // 取出 watchedKey 结构
         wk = listNodeValue(ln);
+        // 删除 db 中的客户端信息, O(1)
         clients = dictFetchValue(wk->db->watched_keys, wk->key);
         redisAssertWithInfo(c,NULL,clients != NULL);
+        // O(N)
         listDelNode(clients,listSearchKey(clients,c));
+
         /* Kill the entry at all if this was the only client */
         if (listLength(clients) == 0)
             dictDelete(wk->db->watched_keys, wk->key);
         /* Remove this watched key from the client->watched list */
+
+        // 将 key 从客户端的监视列表中删除, O(1)
         listDelNode(c->watched_keys,ln);
+
         decrRefCount(wk->key);
         zfree(wk);
     }
@@ -349,17 +395,28 @@ void unwatchAllKeys(redisClient *c) {
 
 /* "Touch" a key, so that if this key is being WATCHed by some client the
  * next EXEC will fail. */
+/*
+ * “碰触”（touch）给定 key ，如果这个 key 正在被监视的话，
+ * 让监视它的客户端在执行 EXEC 命令时失败。
+ *
+ * T = O(N)
+ */
 void touchWatchedKey(redisDb *db, robj *key) {
     list *clients;
     listIter li;
     listNode *ln;
 
+    // 如果数据库中没有任何 key 被监视，那么直接返回
     if (dictSize(db->watched_keys) == 0) return;
+
+    // 取出数据库中所有监视给定 key 的客户端
     clients = dictFetchValue(db->watched_keys, key);
     if (!clients) return;
 
     /* Mark all the clients watching this key as REDIS_DIRTY_CAS */
     /* Check if we are already watching for this key */
+    // 打开所有监视这个 key 的客户端的 REDIS_DIRTY_CAS 状态
+    // O(N)
     listRewind(clients,&li);
     while((ln = listNext(&li))) {
         redisClient *c = listNodeValue(ln);
@@ -372,14 +429,21 @@ void touchWatchedKey(redisDb *db, robj *key) {
  * flush but will be deleted as effect of the flushing operation should
  * be touched. "dbid" is the DB that's getting the flush. -1 if it is
  * a FLUSHALL operation (all the DBs flushed). */
+/*
+ * 为 FLUSHDB 和 FLUSHALL 特别设置的触碰函数
+ *
+ * T = O(N^2)
+ */
 void touchWatchedKeysOnFlush(int dbid) {
     listIter li1, li2;
     listNode *ln;
 
     /* For every client, check all the waited keys */
+    // 列出所有客户端，O(N)
     listRewind(server.clients,&li1);
     while((ln = listNext(&li1))) {
         redisClient *c = listNodeValue(ln);
+        // 列出所有监视 key ,O(N)
         listRewind(c->watched_keys,&li2);
         while((ln = listNext(&li2))) {
             watchedKey *wk = listNodeValue(ln);
@@ -387,6 +451,9 @@ void touchWatchedKeysOnFlush(int dbid) {
             /* For every watched key matching the specified DB, if the
              * key exists, mark the client as dirty, as the key will be
              * removed. */
+            // 如果目标 db 和监视 key 的 DB 相同，
+            // 那么打开客户端的 REDIS_DIRTY_CAS 选项
+            // O(1)
             if (dbid == -1 || wk->db->id == dbid) {
                 if (dictFind(wk->db->dict, wk->key->ptr) != NULL)
                     c->flags |= REDIS_DIRTY_CAS;
@@ -395,20 +462,39 @@ void touchWatchedKeysOnFlush(int dbid) {
     }
 }
 
+/*
+ * 将所有输入键添加到监视列表当中
+ *
+ * T = O(N^2)
+ */
 void watchCommand(redisClient *c) {
     int j;
 
+    // 只能在事务中使用
     if (c->flags & REDIS_MULTI) {
         addReplyError(c,"WATCH inside MULTI is not allowed");
         return;
     }
+
+    // 监视所有 key ，O(N^2)
     for (j = 1; j < c->argc; j++)
+        // O(N)
         watchForKey(c,c->argv[j]);
+
     addReply(c,shared.ok);
 }
 
+/*
+ * 取消对所有 key 的监视
+ * 并关闭客户端的 REDIS_DIRTY_CAS 选项
+ *
+ * T = O(N^2)
+ */
 void unwatchCommand(redisClient *c) {
+    // O(N^2)
     unwatchAllKeys(c);
+
     c->flags &= (~REDIS_DIRTY_CAS);
+
     addReply(c,shared.ok);
 }
