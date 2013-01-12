@@ -851,8 +851,13 @@ struct redisServer {
     int watchdog_period;  /* Software watchdog period in ms. 0 = off */
 };
 
+/*
+ * 订阅模式
+ */
 typedef struct pubsubPattern {
+    // 订阅模式的客户端
     redisClient *client;
+    // 订阅的模式
     robj *pattern;
 } pubsubPattern;
 
