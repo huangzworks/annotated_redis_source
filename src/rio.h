@@ -38,26 +38,38 @@
 
 struct _rio {
     /* Backend functions.
+     * 后端函数
      * Since this functions do not tolerate short writes or reads the return
-     * value is simplified to: zero on error, non zero on complete success. */
+     * 因为这些函数不返回 short count 
+     * value is simplified to: zero on error, non zero on complete success.
+     * 如果值为 0 ，那么发生错误，不为 0 则无错误
+     */
     size_t (*read)(struct _rio *, void *buf, size_t len);
     size_t (*write)(struct _rio *, const void *buf, size_t len);
     off_t (*tell)(struct _rio *);
     /* The update_cksum method if not NULL is used to compute the checksum of all the
-     * data that was read or written so far. The method should be designed so that
+     * data that was read or written so far. 
+     * 如果 update_cksum 函数不为空，那么用它计算所有已写入或读取的数据的校验值。
+     * The method should be designed so that
      * can be called with the current checksum, and the buf and len fields pointing
-     * to the new block of data to add to the checksum computation. */
+     * to the new block of data to add to the checksum computation. 
+     * 函数设计为可以使用当前的校验和调用，而 buf 和 len 则指向要计算校验和的新块。
+     */
     void (*update_cksum)(struct _rio *, const void *buf, size_t len);
 
     /* The current checksum */
+    // 当前校验和
     uint64_t cksum;
 
     /* Backend-specific vars. */
+    // 后端变量
     union {
+        // 处理字节/字符串时使用
         struct {
             sds ptr;
             off_t pos;
         } buffer;
+        // 处理文件时使用
         struct {
             FILE *fp;
         } file;
@@ -70,19 +82,36 @@ typedef struct _rio rio;
  * actual implementation of read / write / tell, and will update the checksum
  * if needed. */
 
+/*
+ * 写入函数
+ *
+ * 写入成功返回 1 ，否则返回 0 。
+ */
 static inline size_t rioWrite(rio *r, const void *buf, size_t len) {
+    // 更新校验和
     if (r->update_cksum) r->update_cksum(r,buf,len);
+    // 写入数据
     return r->write(r,buf,len);
 }
 
+/*
+ * 读取函数
+ *
+ * 读取成功返回 1 ，否则返回 0 。
+ */
 static inline size_t rioRead(rio *r, void *buf, size_t len) {
+    // 读取成功
     if (r->read(r,buf,len) == 1) {
+        // 更新校验和，并返回 1 
         if (r->update_cksum) r->update_cksum(r,buf,len);
         return 1;
     }
     return 0;
 }
 
+/*
+ * 返回当前的偏移量
+ */
 static inline off_t rioTell(rio *r) {
     return r->tell(r);
 }
