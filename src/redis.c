@@ -646,6 +646,8 @@ void incrementallyRehash(void) {
  * memory pages are copied). The goal of this function is to update the ability
  * for dict.c to resize the hash tables accordingly to the fact we have o not
  * running childs. */
+// 在执行保存时关闭对数据库的 rehash 
+// 避免 copy-on-write 问题
 void updateDictResizePolicy(void) {
     if (server.rdb_child_pid == -1 && server.aof_child_pid == -1)
         dictEnableResize();

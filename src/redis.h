@@ -330,6 +330,9 @@ typedef struct redisObject {
  * Note that this macro is taken near the structure definition to make sure
  * we'll update it when the structure is changed, to avoid bugs like
  * bug #85 introduced exactly in this way. */
+/*
+ * 初始化一个从栈上分配的 Redis Object
+ */
 #define initStaticStringObject(_var,_ptr) do { \
     _var.refcount = 1; \
     _var.type = REDIS_STRING; \
