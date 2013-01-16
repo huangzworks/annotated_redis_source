@@ -20,12 +20,19 @@
  * Every thread wait for new jobs in its queue, and process every job
  * sequentially.
  *
+ * 用一个结构表示要执行的工作，而每个类型的工作有一个队列和线程，
+ * 每个线程都顺序地处理线程中的工作。
+ *
  * Jobs of the same type are guaranteed to be processed from the least
  * recently inserted to the most recently inserted (older jobs processed
  * first).
  *
+ * 同一类型的工作按 FIFO 的顺序执行。
+ *
  * Currently there is no way for the creator of the job to be notified about
  * the completion of the operation, this will only be added when/if needed.
+ *
+ * 目前还没有办法通知任务的执行者事务完成。
  *
  * ----------------------------------------------------------------------------
  *
@@ -75,8 +82,13 @@ static unsigned long long bio_pending[REDIS_BIO_NUM_OPS];
 
 /* This structure represents a background Job. It is only used locally to this
  * file as the API deos not expose the internals at all. */
+/*
+ * 表示后台任务的数据结构
+ */
 struct bio_job {
+    // 任务创建时的时间
     time_t time; /* Time at which the job was created. */
+    // 任务的参数，如果需要多于三个时，可以传递数组或者结构
     /* Job specific arguments pointers. If we need to pass more than three
      * arguments we can just pass a pointer to a structure or alike. */
     void *arg1, *arg2, *arg3;
@@ -89,6 +101,7 @@ void *bioProcessBackgroundJobs(void *arg);
 #define REDIS_THREAD_STACK_SIZE (1024*1024*4)
 
 /* Initialize the background system, spawning the thread. */
+// 初始化后台任务系统，生成线程
 void bioInit(void) {
     pthread_attr_t attr;
     pthread_t thread;
@@ -123,6 +136,9 @@ void bioInit(void) {
     }
 }
 
+/*
+ * 创建后台任务
+ */
 void bioCreateBackgroundJob(int type, void *arg1, void *arg2, void *arg3) {
     struct bio_job *job = zmalloc(sizeof(*job));
 
@@ -137,6 +153,9 @@ void bioCreateBackgroundJob(int type, void *arg1, void *arg2, void *arg3) {
     pthread_mutex_unlock(&bio_mutex[type]);
 }
 
+/*
+ * 处理后台任务
+ */
 void *bioProcessBackgroundJobs(void *arg) {
     struct bio_job *job;
     unsigned long type = (unsigned long) arg;
@@ -190,6 +209,9 @@ void *bioProcessBackgroundJobs(void *arg) {
 }
 
 /* Return the number of pending jobs of the specified type. */
+/*
+ * 返回给定类型工作的等待任务数量
+ */
 unsigned long long bioPendingJobsOfType(int type) {
     unsigned long long val;
     pthread_mutex_lock(&bio_mutex[type]);
@@ -202,6 +224,9 @@ unsigned long long bioPendingJobsOfType(int type) {
  * used only when it's critical to stop the threads for some reason.
  * Currently Redis does this only on crash (for instance on SIGSEGV) in order
  * to perform a fast memory check without other threads messing with memory. */
+/*
+ * 杀死进程
+ */
 void bioKillThreads(void) {
     int err, j;
 
