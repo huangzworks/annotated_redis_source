@@ -723,9 +723,13 @@ struct redisServer {
     size_t stat_peak_memory;        /* Max used memory record */
     long long stat_fork_time;       /* Time needed to perform latets fork() */
     long long stat_rejected_conn;   /* Clients rejected because of maxclients */
+    // 保存慢查询日志的链表
     list *slowlog;                  /* SLOWLOG list of commands */
+    // ID 计数器
     long long slowlog_entry_id;     /* SLOWLOG current entry ID */
+    // 命令执行时间的限制
     long long slowlog_log_slower_than; /* SLOWLOG time limit (to get logged) */
+    // 慢查询日志的最大数量
     unsigned long slowlog_max_len;     /* SLOWLOG max number of items logged */
     /* The following two are used to track instantaneous "load" in terms
      * of operations per second. */
