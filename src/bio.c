@@ -68,9 +68,11 @@
 #include "redis.h"
 #include "bio.h"
 
+// 工作线程
 static pthread_t bio_threads[REDIS_BIO_NUM_OPS];
 static pthread_mutex_t bio_mutex[REDIS_BIO_NUM_OPS];
 static pthread_cond_t bio_condvar[REDIS_BIO_NUM_OPS];
+// 存放工作的队列
 static list *bio_jobs[REDIS_BIO_NUM_OPS];
 /* The following array is used to hold the number of pending jobs for every
  * OP type. This allows us to export the bioPendingJobsOfType() API that is
@@ -78,6 +80,7 @@ static list *bio_jobs[REDIS_BIO_NUM_OPS];
  * objects shared with the background thread. The main thread will just wait
  * that there are no longer jobs of this type to be executed before performing
  * the sensible operation. This data is also useful for reporting. */
+// 记录每种类型 job 队列里有多少共组等待执行
 static unsigned long long bio_pending[REDIS_BIO_NUM_OPS];
 
 /* This structure represents a background Job. It is only used locally to this
@@ -109,6 +112,7 @@ void bioInit(void) {
     int j;
 
     /* Initialization of state vars and objects */
+    // 初始化
     for (j = 0; j < REDIS_BIO_NUM_OPS; j++) {
         pthread_mutex_init(&bio_mutex[j],NULL);
         pthread_cond_init(&bio_condvar[j],NULL);
@@ -184,6 +188,7 @@ void *bioProcessBackgroundJobs(void *arg) {
             continue;
         }
         /* Pop the job from the queue. */
+        // 取出（但不删除）队列中的首个任务
         ln = listFirst(bio_jobs[type]);
         job = ln->value;
         /* It is now possible to unlock the background system as we know have
@@ -191,6 +196,7 @@ void *bioProcessBackgroundJobs(void *arg) {
         pthread_mutex_unlock(&bio_mutex[type]);
 
         /* Process the job accordingly to its type. */
+        // 执行任务
         if (type == REDIS_BIO_CLOSE_FILE) {
             close((long)job->arg1);
         } else if (type == REDIS_BIO_AOF_FSYNC) {
@@ -203,6 +209,7 @@ void *bioProcessBackgroundJobs(void *arg) {
         /* Lock again before reiterating the loop, if there are no longer
          * jobs to process we'll block again in pthread_cond_wait(). */
         pthread_mutex_lock(&bio_mutex[type]);
+        // 将任务从队列中删除，并减少任务计数器
         listDelNode(bio_jobs[type],ln);
         bio_pending[type]--;
     }
@@ -225,7 +232,7 @@ unsigned long long bioPendingJobsOfType(int type) {
  * Currently Redis does this only on crash (for instance on SIGSEGV) in order
  * to perform a fast memory check without other threads messing with memory. */
 /*
- * 杀死进程
+ * 不进行清理，直接杀死进程，只在出现严重错误时使用
  */
 void bioKillThreads(void) {
     int err, j;
