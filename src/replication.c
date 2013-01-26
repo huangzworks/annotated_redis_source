@@ -49,6 +49,7 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
         redisClient *slave = ln->value;
 
         /* Don't feed slaves that are still waiting for BGSAVE to start */
+        // 不要向还在等待 BGSAVE 的附属节点发送命令
         if (slave->replstate == REDIS_REPL_WAIT_BGSAVE_START) continue;
 
         /* Feed slaves that are waiting for the initial SYNC (so these commands
@@ -114,12 +115,17 @@ void replicationFeedMonitors(redisClient *c, list *monitors, int dictid, robj **
     decrRefCount(cmdobj);
 }
 
+/*
+ * 
+ */
 void syncCommand(redisClient *c) {
     /* ignore SYNC if aleady slave or in monitor mode */
+    // 客户端已经是附属节点时，直接返回
     if (c->flags & REDIS_SLAVE) return;
 
     /* Refuse SYNC requests if we are a slave but the link with our master
      * is not ok... */
+    // 客户端是附属节点，但是主节点不可用时，直接返回
     if (server.masterhost && server.repl_state != REDIS_REPL_CONNECTED) {
         addReplyError(c,"Can't SYNC while not connected with my master");
         return;
@@ -129,22 +135,27 @@ void syncCommand(redisClient *c) {
      * the client about already issued commands. We need a fresh reply
      * buffer registering the differences between the BGSAVE and the current
      * dataset, so that we can copy to other slaves if needed. */
+    // 有回复等待时，不进行 SYNC
     if (listLength(c->reply) != 0) {
         addReplyError(c,"SYNC is invalid with pending input");
         return;
     }
 
     redisLog(REDIS_NOTICE,"Slave ask for synchronization");
+
     /* Here we need to check if there is a background saving operation
      * in progress, or if it is required to start one */
+    // 检查是否已经有 BGSAVE 在执行，否则就创建一个新的 BGSAVE 任务
     if (server.rdb_child_pid != -1) {
         /* Ok a background save is in progress. Let's check if it is a good
          * one for replication, i.e. if there is another slave that is
          * registering differences since the server forked to save */
+        // 已有 BGSAVE 在执行，检查它能否用于当前客户端的 SYNC 操作
         redisClient *slave;
         listNode *ln;
         listIter li;
 
+        // 检查是否有其他客户端在等待 SYNC 进行
         listRewind(server.slaves,&li);
         while((ln = listNext(&li))) {
             slave = ln->value;
@@ -153,16 +164,20 @@ void syncCommand(redisClient *c) {
         if (ln) {
             /* Perfect, the server is already registering differences for
              * another slave. Set the right state, and copy the buffer. */
+            // 找到一个同样在等到 SYNC 的客户端
+            // 设置当前客户端的状态，并复制 buffer 。
             copyClientOutputBuffer(c,slave);
             c->replstate = REDIS_REPL_WAIT_BGSAVE_END;
             redisLog(REDIS_NOTICE,"Waiting for end of BGSAVE for SYNC");
         } else {
             /* No way, we need to wait for the next BGSAVE in order to
              * register differences */
+            // 没有客户端在等待 SYNC ，当前客户端只能等待下次 BGSAVE 进行
             c->replstate = REDIS_REPL_WAIT_BGSAVE_START;
             redisLog(REDIS_NOTICE,"Waiting for next BGSAVE for SYNC");
         }
     } else {
+        // 没有 BGSAVE 在进行，自己启动一个。
         /* Ok we don't have a BGSAVE in progress, let's start one */
         redisLog(REDIS_NOTICE,"Starting BGSAVE for SYNC");
         if (rdbSaveBackground(server.rdb_filename) != REDIS_OK) {
@@ -170,12 +185,14 @@ void syncCommand(redisClient *c) {
             addReplyError(c,"Unable to perform background save");
             return;
         }
+        // 等待 BGSAVE 结束
         c->replstate = REDIS_REPL_WAIT_BGSAVE_END;
     }
     c->repldbfd = -1;
     c->flags |= REDIS_SLAVE;
     c->slaveseldb = 0;
     listAddNodeTail(server.slaves,c);
+
     return;
 }
 
@@ -219,6 +236,12 @@ void replconfCommand(redisClient *c) {
     addReply(c,shared.ok);
 }
 
+/*
+ * 将主节点的 .rdb 文件内容发送到附属节点
+ *
+ * 每次最大发送的字节数量有 REDIS_IOBUF_LEN 决定，
+ * 视乎文件的大小和服务器的状态，整个发送过程可能会执行多次
+ */
 void sendBulkToSlave(aeEventLoop *el, int fd, void *privdata, int mask) {
     redisClient *slave = privdata;
     REDIS_NOTUSED(el);
@@ -226,6 +249,7 @@ void sendBulkToSlave(aeEventLoop *el, int fd, void *privdata, int mask) {
     char buf[REDIS_IOBUF_LEN];
     ssize_t nwritten, buflen;
 
+    // 刚开始执行 .rdb 文件的发送？
     if (slave->repldboff == 0) {
         /* Write the bulk write count before to transfer the DB. In theory here
          * we don't know how much room there is in the output buffer of the
@@ -233,6 +257,7 @@ void sendBulkToSlave(aeEventLoop *el, int fd, void *privdata, int mask) {
          * operations) will never be smaller than the few bytes we need. */
         sds bulkcount;
 
+        // 首先将主节点 .rdb 文件的大小发送到附属节点
         bulkcount = sdscatprintf(sdsempty(),"$%lld\r\n",(unsigned long long)
             slave->repldbsize);
         if (write(fd,bulkcount,sdslen(bulkcount)) != (signed)sdslen(bulkcount))
@@ -243,26 +268,43 @@ void sendBulkToSlave(aeEventLoop *el, int fd, void *privdata, int mask) {
         }
         sdsfree(bulkcount);
     }
+
+    // 设置主节点 .rdb 文件的偏移量
     lseek(slave->repldbfd,slave->repldboff,SEEK_SET);
+
+    // 读取主节点 .rdb 文件的数据到 buf
     buflen = read(slave->repldbfd,buf,REDIS_IOBUF_LEN);
     if (buflen <= 0) {
+        // 主节点 .rdb 文件读取错误，返回
         redisLog(REDIS_WARNING,"Read error sending DB to slave: %s",
             (buflen == 0) ? "premature EOF" : strerror(errno));
         freeClient(slave);
         return;
     }
+
+    // 将 buf 发送给附属节点
     if ((nwritten = write(fd,buf,buflen)) == -1) {
+        // 附属节点写入出错，返回
         redisLog(REDIS_VERBOSE,"Write error sending DB to slave: %s",
             strerror(errno));
         freeClient(slave);
         return;
     }
+
+    // 更新偏移量
     slave->repldboff += nwritten;
+
+    // .rdb 文件全部发送完毕
     if (slave->repldboff == slave->repldbsize) {
+        // 关闭 .rdb 文件
         close(slave->repldbfd);
+        // 重置
         slave->repldbfd = -1;
+        // 删除发送事件
         aeDeleteFileEvent(server.el,slave->fd,AE_WRITABLE);
+        // 更新附属节点状态
         slave->replstate = REDIS_REPL_ONLINE;
+        // TODO：
         if (aeCreateFileEvent(server.el, slave->fd, AE_WRITABLE,
             sendReplyToClient, slave) == AE_ERR) {
             freeClient(slave);
@@ -273,49 +315,74 @@ void sendBulkToSlave(aeEventLoop *el, int fd, void *privdata, int mask) {
 }
 
 /* This function is called at the end of every backgrond saving.
+ * 
+ * 这个函数在每次 BGSAVE 执行之后被调用。
+ *
  * The argument bgsaveerr is REDIS_OK if the background saving succeeded
  * otherwise REDIS_ERR is passed to the function.
  *
+ * 如果 BGSAVE 执行成功，那么 bgsaveerr 参数的值为 REDIS_OK ，
+ * 否则为 REDIS_ERR 。
+ *
  * The goal of this function is to handle slaves waiting for a successful
- * background saving in order to perform non-blocking synchronization. */
+ * background saving in order to perform non-blocking synchronization. 
+ *
+ * 这个函数用于实现附属节点的非阻塞同步。
+ */
 void updateSlavesWaitingBgsave(int bgsaveerr) {
     listNode *ln;
     int startbgsave = 0;
     listIter li;
 
+    // 遍历所有附属节点
     listRewind(server.slaves,&li);
     while((ln = listNext(&li))) {
         redisClient *slave = ln->value;
 
         if (slave->replstate == REDIS_REPL_WAIT_BGSAVE_START) {
+            // 告诉那些这次不能同步的客户端，可以等待下次 BGSAVE 了。
             startbgsave = 1;
             slave->replstate = REDIS_REPL_WAIT_BGSAVE_END;
         } else if (slave->replstate == REDIS_REPL_WAIT_BGSAVE_END) {
+            // 这些是本次可以同步的客户端
+
             struct redis_stat buf;
 
+            // 如果 BGSAVE 失败，释放 slave 节点
             if (bgsaveerr != REDIS_OK) {
                 freeClient(slave);
                 redisLog(REDIS_WARNING,"SYNC failed. BGSAVE child returned an error");
                 continue;
             }
+            // 打开 .rdb 文件
             if ((slave->repldbfd = open(server.rdb_filename,O_RDONLY)) == -1 ||
+                // 如果打开失败，释放并清除
                 redis_fstat(slave->repldbfd,&buf) == -1) {
                 freeClient(slave);
                 redisLog(REDIS_WARNING,"SYNC failed. Can't open/stat DB after BGSAVE: %s", strerror(errno));
                 continue;
             }
+            // 偏移量
             slave->repldboff = 0;
+            // 数据库大小（.rdb 文件的大小）
             slave->repldbsize = buf.st_size;
+            // 状态
             slave->replstate = REDIS_REPL_SEND_BULK;
+            // 清除 slave->fd 的写事件
             aeDeleteFileEvent(server.el,slave->fd,AE_WRITABLE);
+            // 创建一个将 .rdb 文件内容发送到附属节点的写事件
             if (aeCreateFileEvent(server.el, slave->fd, AE_WRITABLE, sendBulkToSlave, slave) == AE_ERR) {
                 freeClient(slave);
                 continue;
             }
         }
     }
+
+    // 有客户端没有在这次 BGSAVE 中成功同步
     if (startbgsave) {
+        // 再启动一次 BGSAVE
         if (rdbSaveBackground(server.rdb_filename) != REDIS_OK) {
+            // 如果 BGSAVE 失败，清空附属节点
             listIter li;
 
             listRewind(server.slaves,&li);

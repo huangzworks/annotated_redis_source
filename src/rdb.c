@@ -1447,6 +1447,7 @@ void backgroundSaveDoneHandler(int exitcode, int bysignal) {
 
     /* Possibly there are slaves waiting for a BGSAVE in order to be served
      * (the first stage of SYNC is a bulk transfer of dump.rdb) */
+    // 将 rdb 文件保存完毕的消息报告可能正在等待复制的附属节点
     updateSlavesWaitingBgsave(exitcode == 0 ? REDIS_OK : REDIS_ERR);
 }
 
