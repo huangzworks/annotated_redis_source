@@ -423,8 +423,12 @@ typedef struct redisClient {
     int reqtype;
     int multibulklen;       /* number of multi bulk arguments left to read */
     long bulklen;           /* length of bulk argument in multi bulk request */
+
+    // 保存回复的链表
     list *reply;
+    // 链表中保存的所有回复的总字节大小
     unsigned long reply_bytes; /* Tot bytes of objects in reply list */
+
     int sentlen;
     time_t ctime;           /* Client creation time */
     time_t lastinteraction; /* time of the last interaction, used for timeout */
@@ -432,9 +436,13 @@ typedef struct redisClient {
     int flags;              /* REDIS_SLAVE | REDIS_MONITOR | REDIS_MULTI ... */
     int slaveseldb;         /* slave selected db, if this client is a slave */
     int authenticated;      /* when requirepass is non-NULL */
+    // 客户端当前的同步状态
     int replstate;          /* replication state if this is a slave */
+    // 同步数据库的文件描述符
     int repldbfd;           /* replication DB file descriptor */
+    // 同步数据库文件的偏移量
     long repldboff;         /* replication DB file offset */
+    // 同步数据库文件的大小
     off_t repldbsize;       /* replication DB file size */
     int slave_listening_port; /* As configured with: SLAVECONF listening-port */
     multiState mstate;      /* MULTI/EXEC state */
@@ -447,7 +455,9 @@ typedef struct redisClient {
     list *pubsub_patterns;  /* patterns a client is interested in (SUBSCRIBE) */
 
     /* Response buffer */
+    // 回复缓存的当前缓存
     int bufpos;
+    // 回复缓存，可以保存多个回复
     char buf[REDIS_REPLY_CHUNK_BYTES];
 } redisClient;
 
