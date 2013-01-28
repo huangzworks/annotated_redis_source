@@ -110,6 +110,12 @@ void discardTransaction(redisClient *c) {
 
 /* Flag the transacation as DIRTY_EXEC so that EXEC will fail.
  * Should be called every time there is an error while queueing a command. */
+/*
+ * 如果在入队的过程中发生命令出错，
+ * 那么让客户端变为“脏”，令下次事务执行失败
+ *
+ * T = O(1)
+ */
 void flagTransaction(redisClient *c) {
     if (c->flags & REDIS_MULTI)
         c->flags |= REDIS_DIRTY_EXEC;
