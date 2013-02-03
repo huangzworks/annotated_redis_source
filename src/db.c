@@ -421,7 +421,9 @@ void selectCommand(redisClient *c) {
 }
 
 /*
- * 
+ * RANDOMKEY 命令的实现
+ *
+ * 随机从数据库中返回一个键
  */
 void randomkeyCommand(redisClient *c) {
     robj *key;
@@ -436,13 +438,18 @@ void randomkeyCommand(redisClient *c) {
 }
 
 /*
+ * KEYS 命令的实现
  *
+ * 查找和给定模式匹配的 key
  */
 void keysCommand(redisClient *c) {
     dictIterator *di;
     dictEntry *de;
+
     sds pattern = c->argv[1]->ptr;
-    int plen = sdslen(pattern), allkeys;
+
+    int plen = sdslen(pattern),
+        allkeys;
     unsigned long numkeys = 0;
     void *replylen = addDeferredMultiBulkLength(c);
 
@@ -470,15 +477,27 @@ void keysCommand(redisClient *c) {
     setDeferredMultiBulkLength(c,replylen,numkeys);
 }
 
+/*
+ * DBSIZE 命令的实现
+ *
+ * 返回数据库键值对数量
+ */
 void dbsizeCommand(redisClient *c) {
     addReplyLongLong(c,dictSize(c->db->dict));
 }
 
+/*
+ * LASTSAVE 命令的实现
+ *
+ * 返回数据库的最后保存时间
+ */
 void lastsaveCommand(redisClient *c) {
     addReplyLongLong(c,server.lastsave);
 }
 
 /*
+ * TYPE 命令的实现
+ * 
  * 返回 key 对象类型的字符串形式
  */
 void typeCommand(redisClient *c) {
@@ -710,12 +729,19 @@ long long getExpire(redisDb *db, robj *key) {
  * keys. */
 /*
  * 向附属节点和 AOF 文件传播过期命令
+ *
+ * 当一个键在主节点中过期时，传播一个 DEL 命令到所有附属节点和 AOF 文件
+ *
+ * 通过将删除过期键的工作集中在主节点中，可以维持数据库的一致性。
  */
 void propagateExpire(redisDb *db, robj *key) {
     robj *argv[2];
 
+    // DEL 命名
     argv[0] = shared.del;
+    // 目标键
     argv[1] = key;
+
     incrRefCount(argv[0]);
     incrRefCount(argv[1]);
 
@@ -731,6 +757,9 @@ void propagateExpire(redisDb *db, robj *key) {
 
 /*
  * 如果 key 已经过期，那么将它删除，否则，不做动作。
+ *
+ * key 没有过期时间、服务器正在载入或 key 未过期时，返回 0 
+ * key 已过期，那么返回正数值
  */
 int expireIfNeeded(redisDb *db, robj *key) {
     // 取出 key 的过期时间
@@ -781,21 +810,39 @@ int expireIfNeeded(redisDb *db, robj *key) {
  * the "basetime" argument is used to signal what the base time is (either 0
  * for *AT variants of the command, or the current time for relative expires).
  *
+ * 这个命令是 EXPIRE 、 PEXPIRE 、 EXPIREAT 和 PEXPIREAT 命令的实现。
+ *
+ * 命令的第二个参数可能是绝对值，也可能是相对值。
+ * 当执行 *AT 命令时， basetime 为 0 ，在其他情况下，它保存的就是当前的绝对时间。
+ *
  * unit is either UNIT_SECONDS or UNIT_MILLISECONDS, and is only used for
- * the argv[2] parameter. The basetime is always specified in milliesconds. */
+ * the argv[2] parameter. The basetime is always specified in milliesconds. 
+ *
+ * unit 用于指定第二个参数的格式，它可以是 UNIT_SECONDS 或 UNIT_MILLISECONDS ，
+ * basetime 参数总是毫秒格式的。
+ */
 void expireGenericCommand(redisClient *c, long long basetime, int unit) {
+
     dictEntry *de;
-    robj *key = c->argv[1], *param = c->argv[2];
+
+    robj *key = c->argv[1], 
+         *param = c->argv[2];
+
     long long when; /* unix time in milliseconds when the key will expire. */
 
+    // 取出 when 参数
     if (getLongLongFromObjectOrReply(c, param, &when, NULL) != REDIS_OK)
         return;
 
+    // 如果 when 参数以秒计算，那么将它转换成毫秒
     if (unit == UNIT_SECONDS) when *= 1000;
+    // 将时间设置为绝对时间
     when += basetime;
 
+    // 取出键
     de = dictFind(c->db->dict,key->ptr);
     if (de == NULL) {
+        // 键不存在，返回 0
         addReply(c,shared.czero);
         return;
     }
@@ -805,6 +852,9 @@ void expireGenericCommand(redisClient *c, long long basetime, int unit) {
      *
      * Instead we take the other branch of the IF statement setting an expire
      * (possibly in the past) and wait for an explicit DEL from the master. */
+    // 如果当前节点为主节点
+    // 并且在附属节点或者 AOF 文件中解释到了负数 TTL ，或者已经过期的绝对时间
+    // 那么删除 key ，并向附属节点和 AOF 发送 DEL 命令
     if (when <= mstime() && !server.loading && !server.masterhost) {
         robj *aux;
 
@@ -818,8 +868,12 @@ void expireGenericCommand(redisClient *c, long long basetime, int unit) {
         signalModifiedKey(c->db,key);
         addReply(c, shared.cone);
         return;
+
+    // 否则，设置 key 的过期时间
     } else {
+
         setExpire(c->db,key,when);
+
         addReply(c,shared.cone);
         signalModifiedKey(c->db,key);
         server.dirty++;
