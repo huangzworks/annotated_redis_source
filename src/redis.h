@@ -332,6 +332,7 @@
 /* Using the following macro you can run code inside serverCron() with the
  * specified period, specified in milliseconds.
  * The actual resolution depends on REDIS_HZ. */
+// 在 serverCron() 中，按指定的毫秒周期执行代码
 #define run_with_period(_ms_) if (!(server.cronloops%((_ms_)/(1000/REDIS_HZ))))
 
 /* We can print the stacktrace, so our assert is defined this way: */
@@ -388,6 +389,7 @@ typedef struct redisDb {
     dict *ready_keys;           /* Blocked keys that received a PUSH */
     // 正在监视某个/某些 key 的所有客户端
     dict *watched_keys;         /* WATCHED keys for MULTI/EXEC CAS */
+    // 数据库的号码
     int id;
 } redisDb;
 
