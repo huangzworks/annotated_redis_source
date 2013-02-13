@@ -793,7 +793,7 @@ int rdbSave(char *filename) {
         redisDb *db = server.db+j;
         // 指向数据库 key space
         dict *d = db->dict;
-        // 数据库为空时直接返回
+        // 数据库为空， pass ，处理下个数据库
         if (dictSize(d) == 0) continue;
 
         // 创建迭代器
@@ -1247,7 +1247,7 @@ void startLoading(FILE *fp) {
 
 /* Refresh the loading progress info */
 /*
- * 刷新载入进程信息
+ * 更新最大分配内存数
  */
 void loadingProgress(off_t pos) {
     server.loading_loaded_bytes = pos;
@@ -1476,7 +1476,7 @@ void bgsaveCommand(redisClient *c) {
     // 后台保存工作正在进行，返回
     if (server.rdb_child_pid != -1) {
         addReplyError(c,"Background save already in progress");
-    // AOF 日志的写入工作正在进行，返回
+    // AOF 重写工作正在进行，返回
     } else if (server.aof_child_pid != -1) {
         addReplyError(c,"Can't BGSAVE while AOF log rewriting is in progress");
     // 开始后台写入

@@ -205,12 +205,12 @@ void aof_background_fsync(int fd) {
 /* Called when the user switches from "appendonly yes" to "appendonly no"
  * at runtime using the CONFIG command. */
 /*
- * 在用户在运行时通过 CONFIG 命令关闭 AOF 模式时执行
+ * 用户在运行时通过 CONFIG 命令关闭 AOF 模式时执行
  */
 void stopAppendOnly(void) {
     redisAssert(server.aof_state != REDIS_AOF_OFF);
 
-    // 冲洗缓存到 AOF 文件
+    // 强制冲洗缓存到 AOF 文件
     flushAppendOnlyFile(1);
     // fsync
     aof_fsync(server.aof_fd);
@@ -255,6 +255,7 @@ int startAppendOnly(void) {
         redisLog(REDIS_WARNING,"Redis needs to enable the AOF but can't open the append only file: %s",strerror(errno));
         return REDIS_ERR;
     }
+    // 生成初始化 AOF 文件
     if (rewriteAppendOnlyFileBackground() == REDIS_ERR) {
         close(server.aof_fd);
         redisLog(REDIS_WARNING,"Redis needs to enable the AOF but can't trigger a background AOF rewrite operation. Check the above logs for more info about the error.");
@@ -320,6 +321,7 @@ void flushAppendOnlyFile(int force) {
          * the write for a couple of seconds. */
         // 如果 aof_fsync 队列里已经有正在等待的任务
         if (sync_in_progress) {
+
             // 推迟 aof 重写 ...
 
             if (server.aof_flush_postponed_start == 0) {
@@ -330,14 +332,14 @@ void flushAppendOnlyFile(int force) {
                 return;
 
             } else if (server.unixtime - server.aof_flush_postponed_start < 2) {
-                // 上次推延冲洗在两秒之内，无所谓，直接返回
+                // 允许在两秒之内的推延冲洗
                 /* We were already waiting for fsync to finish, but for less
                  * than two seconds this is still ok. Postpone again. */
                 return;
             }
             /* Otherwise fall trough, and go write since we can't wait
              * over two seconds. */
-            // 增加冲洗推延次数
+            // 记录冲洗推延次数
             server.aof_delayed_fsync++;
             redisLog(REDIS_NOTICE,"Asynchronous AOF fsync is taking too long (disk is busy?). Writing the AOF buffer without waiting for fsync to complete, this may slow down Redis.");
         }
@@ -396,7 +398,7 @@ void flushAppendOnlyFile(int force) {
      * children doing I/O in the background. */
     // 以下条件发生时，直接返回，不执行后面的 fsnyc ：
     // 不允许在 AOF 重写时写入 AOF 文件 并且
-    // 重写正在进行 或者 RDB 写入正在进行
+    // REWRITEAOF 正在执行 或者 BGSAVE 正在进行
     if (server.aof_no_fsync_on_rewrite &&
         (server.aof_child_pid != -1 || server.rdb_child_pid != -1))
             return;
@@ -430,23 +432,37 @@ sds catAppendOnlyGenericCommand(sds dst, int argc, robj **argv) {
     int len, j;
     robj *o;
 
+    // 记录协议的参数个数部分（argc）
+    // 比如 argc == 4 时，生成字符串 "*4\r\n"
     buf[0] = '*';
     len = 1+ll2string(buf+1,sizeof(buf)-1,argc);
     buf[len++] = '\r';
     buf[len++] = '\n';
     dst = sdscatlen(dst,buf,len);
 
+    // 遍历所有参数（argv），并生成协议
     for (j = 0; j < argc; j++) {
+
+        // 取出字符串形式的参数
         o = getDecodedObject(argv[j]);
+
+        // 记录参数字符串长度的协议
+        // 比如，对长度为 3 的命令 SET ，生成字符串
+        // "$3\r\n"
         buf[0] = '$';
         len = 1+ll2string(buf+1,sizeof(buf)-1,sdslen(o->ptr));
         buf[len++] = '\r';
         buf[len++] = '\n';
         dst = sdscatlen(dst,buf,len);
+
+        // 根据参数，生成协议
+        // 比如，对于字符串 SET ，生成以下字符串：
+        // "SET\r\n"
         dst = sdscatlen(dst,o->ptr,sdslen(o->ptr));
         dst = sdscatlen(dst,"\r\n",2);
         decrRefCount(o);
     }
+
     return dst;
 }
 
