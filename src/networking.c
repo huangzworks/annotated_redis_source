@@ -73,39 +73,76 @@ redisClient *createClient(int fd) {
         }
     }
 
+    // 数据库
     selectDb(c,0);
+
+    // 文件描述符
     c->fd = fd;
+    
+    // 查询缓存相关的设置
     c->bufpos = 0;
     c->querybuf = sdsempty();
     c->querybuf_peak = 0;
     c->reqtype = 0;
+
+    // 命令及参数
     c->argc = 0;
     c->argv = NULL;
     c->cmd = c->lastcmd = NULL;
+
+    // 回复
     c->multibulklen = 0;
     c->bulklen = -1;
     c->sentlen = 0;
+
+    // 状态
     c->flags = 0;
+
+    // 用于 LRU 和 IDLE 计算
     c->ctime = c->lastinteraction = server.unixtime;
+
+    // 身份验证
     c->authenticated = 0;
+
+    // REPL 状态
     c->replstate = REDIS_REPL_NONE;
+
+    // 附属监听端口
     c->slave_listening_port = 0;
+
+    // 回复
     c->reply = listCreate();
     c->reply_bytes = 0;
+
+    // 软缓存超限提醒
     c->obuf_soft_limit_reached_time = 0;
+
+    // 回复处理函数
     listSetFreeMethod(c->reply,decrRefCount);
     listSetDupMethod(c->reply,dupClientReplyValue);
+
+    // 阻塞 POP 相关
     c->bpop.keys = dictCreate(&setDictType,NULL);
     c->bpop.timeout = 0;
     c->bpop.target = NULL;
+
+    //
     c->io_keys = listCreate();
+
+    // 所有被监视的键
     c->watched_keys = listCreate();
     listSetFreeMethod(c->io_keys,decrRefCount);
+
+    // pubsub
     c->pubsub_channels = dictCreate(&setDictType,NULL);
     c->pubsub_patterns = listCreate();
     listSetFreeMethod(c->pubsub_patterns,decrRefCount);
     listSetMatchMethod(c->pubsub_patterns,listMatchObjects);
+
+    // 如果不是伪客户端，那么将客户端加入到服务器客户端列表中
     if (fd != -1) listAddNodeTail(server.clients,c);
+
+    // 初始化事务状态
     initClientMultiState(c);
 
     return c;
@@ -655,23 +692,30 @@ void copyClientOutputBuffer(redisClient *dst, redisClient *src) {
 
 static void acceptCommonHandler(int fd, int flags) {
     redisClient *c;
+
+    // 创建新客户端
     if ((c = createClient(fd)) == NULL) {
         redisLog(REDIS_WARNING,"Error allocating resources for the client");
         close(fd); /* May be already closed, just ignore errors */
         return;
     }
+
     /* If maxclient directive is set and this is one client more... close the
      * connection. Note that we create the client instead to check before
      * for this condition, since now the socket is already set in nonblocking
      * mode and we can send an error for free using the Kernel I/O */
+    // 如果超过最大打开客户端数量，那么关闭这个客户端
+    // 先打开再检查是为了方便发送错误
     if (listLength(server.clients) > server.maxclients) {
         char *err = "-ERR max number of clients reached\r\n";
 
         /* That's a best effort error message, don't check write errors */
+        // 发送错误信息到客户端
         if (write(c->fd,err,strlen(err)) == -1) {
             /* Nothing to do, Just to avoid the warning... */
         }
         server.stat_rejected_conn++;
+        // 释放客户端
         freeClient(c);
         return;
     }
@@ -686,12 +730,15 @@ void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
     REDIS_NOTUSED(mask);
     REDIS_NOTUSED(privdata);
 
+    // 连接
     cfd = anetTcpAccept(server.neterr, fd, cip, &cport);
     if (cfd == AE_ERR) {
         redisLog(REDIS_WARNING,"Accepting client connection: %s", server.neterr);
         return;
     }
     redisLog(REDIS_VERBOSE,"Accepted %s:%d", cip, cport);
+
+    // 创建客户端
     acceptCommonHandler(cfd,0);
 }
 
@@ -734,6 +781,9 @@ void disconnectSlaves(void) {
     }
 }
 
+/*
+ * 释放客户端
+ */
 void freeClient(redisClient *c) {
     listNode *ln;
 
@@ -1198,10 +1248,15 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
         if (remaining < readlen) readlen = remaining;
     }
 
+    // 分配空间
     qblen = sdslen(c->querybuf);
     if (c->querybuf_peak < qblen) c->querybuf_peak = qblen;
     c->querybuf = sdsMakeRoomFor(c->querybuf, readlen);
+    
+    // 读入到 buf
     nread = read(fd, c->querybuf+qblen, readlen);
+
+    // 处理读错误值和 EOF （客户端已关闭）
     if (nread == -1) {
         if (errno == EAGAIN) {
             nread = 0;
@@ -1215,13 +1270,18 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
         freeClient(c);
         return;
     }
+
+    // 根据读入情况更新客户端统计数据
     if (nread) {
         sdsIncrLen(c->querybuf,nread);
+        // 最后一次交互时间
         c->lastinteraction = server.unixtime;
     } else {
         server.current_client = NULL;
         return;
     }
+
+    // 读入缓存不能超过限制，否则断开并清除客户端
     if (sdslen(c->querybuf) > server.client_max_querybuf_len) {
         sds ci = getClientInfoString(c), bytes = sdsempty();
 
@@ -1232,7 +1292,10 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
         freeClient(c);
         return;
     }
+
+    // 执行命令
     processInputBuffer(c);
+
     server.current_client = NULL;
 }
 

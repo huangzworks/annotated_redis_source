@@ -462,19 +462,30 @@ typedef struct readyList {
  * 从而实现多路复用。
  */
 typedef struct redisClient {
+
     // socket 文件描述符
     int fd;
+
     // 指向当前目标数据库的指针
     redisDb *db;
+
     // 当前目标数据库的号码
     int dictid;
+
+    // 查询缓存
     sds querybuf;
     size_t querybuf_peak;   /* Recent (100ms or more) peak of querybuf size */
+
     // 参数的个数
     int argc;
+
     // 字符串表示的命令，以及命令的参数
     robj **argv;
+
+    // 命令，以及上个命令
     struct redisCommand *cmd, *lastcmd;
+
+    // 回复类型
     int reqtype;
     int multibulklen;       /* number of multi bulk arguments left to read */
     long bulklen;           /* length of bulk argument in multi bulk request */
@@ -484,11 +495,14 @@ typedef struct redisClient {
     // 链表中保存的所有回复的总字节大小
     unsigned long reply_bytes; /* Tot bytes of objects in reply list */
 
+    // 统计数据
     int sentlen;
     time_t ctime;           /* Client creation time */
     time_t lastinteraction; /* time of the last interaction, used for timeout */
     time_t obuf_soft_limit_reached_time;
     int flags;              /* REDIS_SLAVE | REDIS_MONITOR | REDIS_MULTI ... */
+
+    // 复数功能相关
     int slaveseldb;         /* slave selected db, if this client is a slave */
     int authenticated;      /* when requirepass is non-NULL */
     // 客户端当前的同步状态
@@ -500,12 +514,19 @@ typedef struct redisClient {
     // 同步数据库文件的大小
     off_t repldbsize;       /* replication DB file size */
     int slave_listening_port; /* As configured with: SLAVECONF listening-port */
+
+    // 事务实现
     multiState mstate;      /* MULTI/EXEC state */
+
     // 阻塞状态
     blockingState bpop;   /* blocking state */
     list *io_keys;          /* Keys this client is waiting to be loaded from the
                              * swap file in order to continue. */
+
+    // 被监视的 KEY
     list *watched_keys;     /* Keys WATCHED for MULTI/EXEC CAS */
+
+    // pubsub
     dict *pubsub_channels;  /* channels a client is interested in (SUBSCRIBE) */
     list *pubsub_patterns;  /* patterns a client is interested in (SUBSCRIBE) */
 
@@ -748,27 +769,38 @@ struct redisServer {
 
     // 数据库数组
     redisDb *db;
+
     // 命令表
     dict *commands;             /* Command table hash table */
+
     // 事件状态结构
     aeEventLoop *el;
+
     // LRU
     unsigned lruclock:22;       /* Clock incrementing every minute, for LRU */
     unsigned lruclock_padding:10;
+
     // 关闭标志
     int shutdown_asap;          /* SHUTDOWN needed ASAP */
+
     // 主动 rehash
     int activerehashing;        /* Incremental rehash in serverCron() */
+
     // 密码
     char *requirepass;          /* Pass for AUTH command, or NULL */
+
     // PID 文件路径
     char *pidfile;              /* PID file path */
+
     // 宿主架构字长
     int arch_bits;              /* 32 or 64 depending on sizeof(long) */
+
     // CRON 函数调用的次数
     int cronloops;              /* Number of times the cron function run */
+
     // 每次调用 exec 时都创建新 ID
     char runid[REDIS_RUN_ID_SIZE+1];  /* ID always different at every exec. */
+
     // 如果服务器为 SENTINEL ，那么为真
     int sentinel_mode;          /* True if this instance is a Sentinel. */
 
@@ -784,6 +816,8 @@ struct redisServer {
     int ipfd;                   /* TCP socket file descriptor */
     int sofd;                   /* Unix socket file descriptor */
     int cfd;                    /* Cluster bus lisetning socket */
+
+    /* 客户端 */
     // 所有当前活动的客户端
     list *clients;              /* List of active clients */
     // 所有等待关闭的客户端
@@ -792,8 +826,10 @@ struct redisServer {
     list *slaves, *monitors;    /* List of slaves and MONITORs */
     // 当前客户端，只在创建崩溃报告时使用
     redisClient *current_client; /* Current client, only used on crash report */
+
     char neterr[ANET_ERR_LEN];   /* Error buffer for anet.c */
     dict *migrate_cached_sockets;/* MIGRATE cached sockets */
+
     /* RDB / AOF loading information */
     int loading;                /* We are loading data from disk if true */
     off_t loading_total_bytes;
@@ -818,6 +854,7 @@ struct redisServer {
 
     // 保存慢查询日志的链表
     list *slowlog;                  /* SLOWLOG list of commands */
+
     // ID 计数器
     long long slowlog_entry_id;     /* SLOWLOG current entry ID */
     // 命令执行时间的限制
@@ -831,6 +868,7 @@ struct redisServer {
     long long ops_sec_last_sample_ops;  /* numcommands in last sample */
     long long ops_sec_samples[REDIS_OPS_SEC_SAMPLES];
     int ops_sec_idx;
+
     /* Configuration */
     int verbosity;                  /* Loglevel in redis.conf */
     int maxidletime;                /* Client timeout in seconds */
@@ -838,6 +876,7 @@ struct redisServer {
     int dbnum;                      /* Total number of configured DBs */
     int daemonize;                  /* True if running as a daemon */
     clientBufferLimitsConfig client_obuf_limits[REDIS_CLIENT_LIMIT_NUM_CLASSES];
+
     /* AOF persistence */
     int aof_state;                  /* REDIS_AOF_(ON|OFF|WAIT_REWRITE) */
     int aof_fsync;                  /* Kind of fsync() policy */
@@ -859,6 +898,7 @@ struct redisServer {
     time_t aof_rewrite_time_start;  /* Current AOF rewrite start time. */
     int aof_lastbgrewrite_status;   /* REDIS_OK or REDIS_ERR */
     unsigned long aof_delayed_fsync;  /* delayed AOF fsync() counter */
+
     /* RDB persistence */
     long long dirty;                /* Changes to DB from the last save */
     long long dirty_before_bgsave;  /* Used to restore dirty on failed BGSAVE */
@@ -873,6 +913,7 @@ struct redisServer {
     time_t rdb_save_time_start;     /* Current RDB save start time. */
     int lastbgsave_status;          /* REDIS_OK or REDIS_ERR */
     int stop_writes_on_bgsave_err;  /* Don't allow writes if can't BGSAVE */
+
     /* Propagation of commands in AOF / replication */
     redisOpArray also_propagate;    /* Additional command to propagate. */
     /* Logging */
@@ -880,6 +921,7 @@ struct redisServer {
     int syslog_enabled;             /* Is syslog enabled? */
     char *syslog_ident;             /* Syslog ident */
     int syslog_facility;            /* Syslog facility */
+
     /* Slave specific fields */
     char *masterauth;               /* AUTH with this password with master */
     char *masterhost;               /* Hostname of master */
@@ -900,21 +942,25 @@ struct redisServer {
     int repl_slave_ro;          /* Slave is read only? */
     time_t repl_down_since; /* Unix time at which link with master went down */
     int slave_priority;             /* Reported in INFO and used by Sentinel. */
+
     /* Limits */
     unsigned int maxclients;        /* Max number of simultaneous clients */
     unsigned long long maxmemory;   /* Max number of memory bytes to use */
     int maxmemory_policy;           /* Policy for key evition */
     int maxmemory_samples;          /* Pricision of random sampling */
+
     /* Blocked clients */
     unsigned int bpop_blocked_clients; /* Number of clients blocked by lists */
     // 要在下一次事件 lopp 前取消阻塞的所有客户端
     list *unblocked_clients; /* list of clients to unblock before next loop */
     list *ready_keys;        /* List of readyList structures for BLPOP & co */
+
     /* Sort parameters - qsort_r() is only available under BSD so we
      * have to take this state global, in order to pass it to sortCompare() */
     int sort_desc;
     int sort_alpha;
     int sort_bypattern;
+
     /* Zip structure config, see redis.conf for more information  */
     size_t hash_max_ziplist_entries;
     size_t hash_max_ziplist_value;

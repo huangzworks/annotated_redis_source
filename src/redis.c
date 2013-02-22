@@ -1277,27 +1277,48 @@ void createSharedObjects(void) {
     }
 }
 
+/*
+ * 初始化 server 结构
+ */
 void initServerConfig() {
     getRandomHexChars(server.runid,REDIS_RUN_ID_SIZE);
     server.runid[REDIS_RUN_ID_SIZE] = '\0';
+
+    // 判断架构
     server.arch_bits = (sizeof(long) == 8) ? 64 : 32;
+
+    // 网络连接相关
     server.port = REDIS_SERVERPORT;
     server.bindaddr = NULL;
     server.unixsocket = NULL;
     server.unixsocketperm = 0;
     server.ipfd = -1;
     server.sofd = -1;
+
+    // 数据库个数
     server.dbnum = REDIS_DEFAULT_DBNUM;
     server.verbosity = REDIS_NOTICE;
     server.maxidletime = REDIS_MAXIDLETIME;
+
+    // 客户端查询缓存最大长度
     server.client_max_querybuf_len = REDIS_MAX_QUERYBUF_LEN;
+
+    // 保存 flag
     server.saveparams = NULL;
+
+    // 是否正在载入数据？
     server.loading = 0;
+
+    // log
     server.logfile = NULL; /* NULL = log on standard output */
     server.syslog_enabled = 0;
     server.syslog_ident = zstrdup("redis");
     server.syslog_facility = LOG_LOCAL0;
+
+    // deamon 进程
     server.daemonize = 0;
+
+    // AOF 状态
     server.aof_state = REDIS_AOF_OFF;
     server.aof_fsync = AOF_FSYNC_EVERYSEC;
     server.aof_no_fsync_on_rewrite = 0;
@@ -1313,18 +1334,28 @@ void initServerConfig() {
     server.aof_fd = -1;
     server.aof_selected_db = -1; /* Make sure the first time will not match */
     server.aof_flush_postponed_start = 0;
+
+    // 持久化相关
     server.pidfile = zstrdup("/var/run/redis.pid");
     server.rdb_filename = zstrdup("dump.rdb");
     server.aof_filename = zstrdup("appendonly.aof");
     server.requirepass = NULL;
     server.rdb_compression = 1;
     server.rdb_checksum = 1;
+
+    // 开启主动 rehash
     server.activerehashing = 1;
+
+    // 最大客户端数量
     server.maxclients = REDIS_MAX_CLIENTS;
     server.bpop_blocked_clients = 0;
+
+    // 内存相关
     server.maxmemory = 0;
     server.maxmemory_policy = REDIS_MAXMEMORY_VOLATILE_LRU;
     server.maxmemory_samples = 3;
+
+    // 压缩数据结构实体数量限制
     server.hash_max_ziplist_entries = REDIS_HASH_MAX_ZIPLIST_ENTRIES;
     server.hash_max_ziplist_value = REDIS_HASH_MAX_ZIPLIST_VALUE;
     server.list_max_ziplist_entries = REDIS_LIST_MAX_ZIPLIST_ENTRIES;
@@ -1332,11 +1363,19 @@ void initServerConfig() {
     server.set_max_intset_entries = REDIS_SET_MAX_INTSET_ENTRIES;
     server.zset_max_ziplist_entries = REDIS_ZSET_MAX_ZIPLIST_ENTRIES;
     server.zset_max_ziplist_value = REDIS_ZSET_MAX_ZIPLIST_VALUE;
+
+    // 关闭指示 flag
     server.shutdown_asap = 0;
+
+    // REPL
     server.repl_ping_slave_period = REDIS_REPL_PING_SLAVE_PERIOD;
     server.repl_timeout = REDIS_REPL_TIMEOUT;
+
+    // 集群相关
     server.cluster_enabled = 0;
     server.cluster.configfile = zstrdup("nodes.conf");
+
+    // LUA 脚本相关
     server.lua_caller = NULL;
     server.lua_time_limit = REDIS_LUA_TIME_LIMIT;
     server.lua_client = NULL;
@@ -1346,9 +1385,12 @@ void initServerConfig() {
     updateLRUClock();
     resetServerSaveParams();
 
+    // 保存相关
     appendServerSaveParams(60*60,1);  /* save after 1 hour and 1 change */
     appendServerSaveParams(300,100);  /* save after 5 minutes and 100 changes */
     appendServerSaveParams(60,10000); /* save after 1 minute and 10000 changes */
+
+    // 复制相关
     /* Replication related */
     server.masterauth = NULL;
     server.masterhost = NULL;
@@ -1361,6 +1403,7 @@ void initServerConfig() {
     server.repl_down_since = time(NULL);
     server.slave_priority = REDIS_DEFAULT_SLAVE_PRIORITY;
 
+    // 客户端输出缓存限制
     /* Client output buffer limits */
     server.client_obuf_limits[REDIS_CLIENT_LIMIT_CLASS_NORMAL].hard_limit_bytes = 0;
     server.client_obuf_limits[REDIS_CLIENT_LIMIT_CLASS_NORMAL].soft_limit_bytes = 0;
@@ -1381,6 +1424,7 @@ void initServerConfig() {
     /* Command table -- we intiialize it here as it is part of the
      * initial configuration, since command names may be changed via
      * redis.conf using the rename-command directive. */
+    // 命令表
     server.commands = dictCreate(&commandTableDictType,NULL);
     populateCommandTable();
     server.delCommand = lookupCommandByCString("del");
@@ -1390,10 +1434,12 @@ void initServerConfig() {
     server.rpopCommand = lookupCommandByCString("rpop");
     
     /* Slow log */
+    // 慢查询
     server.slowlog_log_slower_than = REDIS_SLOWLOG_LOG_SLOWER_THAN;
     server.slowlog_max_len = REDIS_SLOWLOG_MAX_LEN;
 
     /* Debugging */
+    // 调试
     server.assert_failed = "<no assertion failed>";
     server.assert_file = "<no file>";
     server.assert_line = 0;
@@ -1409,6 +1455,7 @@ void initServerConfig() {
  * If it will not be possible to set the limit accordingly to the configured
  * max number of clients, the function will do the reverse setting
  * server.maxclients to the value that we can actually handle. */
+// 用检测办法，获取最大打开文件的值
 void adjustOpenFilesLimit(void) {
     rlim_t maxfiles = server.maxclients+32;
     struct rlimit limit;
@@ -1445,6 +1492,9 @@ void adjustOpenFilesLimit(void) {
     }
 }
 
+/*
+ * 初始化服务器功能
+ */
 void initServer() {
     int j;
 
@@ -1452,24 +1502,40 @@ void initServer() {
     signal(SIGPIPE, SIG_IGN);
     setupSignalHandlers();
 
+    // LOG
     if (server.syslog_enabled) {
         openlog(server.syslog_ident, LOG_PID | LOG_NDELAY | LOG_NOWAIT,
             server.syslog_facility);
     }
 
+    // 当前处理的客户端
     server.current_client = NULL;
+    // 所有客户端
     server.clients = listCreate();
+    // 要被关闭的客户端
     server.clients_to_close = listCreate();
+    // 附属节点
     server.slaves = listCreate();
+    // monitor 客户端
     server.monitors = listCreate();
+    // 被取消阻塞的客户端
     server.unblocked_clients = listCreate();
+    // 所有已就绪 key
     server.ready_keys = listCreate();
 
+    // 初始化共享对象
     createSharedObjects();
+
+    // 获取最大打开文件数目
     adjustOpenFilesLimit();
+
+    // 初始化事件状态
     server.el = aeCreateEventLoop(server.maxclients+1024);
+    
+    // 初始化数据库
     server.db = zmalloc(sizeof(redisDb)*server.dbnum);
 
+    // 初始化网络连接
     if (server.port != 0) {
         server.ipfd = anetTcpServer(server.neterr,server.port,server.bindaddr);
         if (server.ipfd == ANET_ERR) {
@@ -1478,6 +1544,7 @@ void initServer() {
             exit(1);
         }
     }
+
     if (server.unixsocket != NULL) {
         unlink(server.unixsocket); /* don't care if this fails */
         server.sofd = anetUnixServer(server.neterr,server.unixsocket,server.unixsocketperm);
@@ -1490,27 +1557,48 @@ void initServer() {
         redisLog(REDIS_WARNING, "Configured to not listen anywhere, exiting.");
         exit(1);
     }
+
+    // 初始化数据库
     for (j = 0; j < server.dbnum; j++) {
+        // key space
         server.db[j].dict = dictCreate(&dbDictType,NULL);
+        // 过期空间
         server.db[j].expires = dictCreate(&keyptrDictType,NULL);
+        // 被阻塞键
         server.db[j].blocking_keys = dictCreate(&keylistDictType,NULL);
+        // 可解除阻塞的键
         server.db[j].ready_keys = dictCreate(&setDictType,NULL);
+        // 被 WATCH 命令监视的键
         server.db[j].watched_keys = dictCreate(&keylistDictType,NULL);
+        // 数据库 ID
         server.db[j].id = j;
     }
+
+    // pubsub
     server.pubsub_channels = dictCreate(&keylistDictType,NULL);
     server.pubsub_patterns = listCreate();
     listSetFreeMethod(server.pubsub_patterns,freePubsubPattern);
     listSetMatchMethod(server.pubsub_patterns,listMatchPubsubPattern);
+
+    // CRON 执行计数
     server.cronloops = 0;
+
+    // BGSAVE 执行指示变量
     server.rdb_child_pid = -1;
+    // BGREWRITEAOF 执行指示变量
     server.aof_child_pid = -1;
+    // 初始化 AOF 重写缓存
     aofRewriteBufferReset();
     server.aof_buf = sdsempty();
+    // 最后一次成功保存的时间
     server.lastsave = time(NULL);
+    // 结束 SAVE 的时间
     server.rdb_save_time_last = -1;
+    // 开始 SAVE 的时间
     server.rdb_save_time_start = -1;
     server.dirty = 0;
+
+    // 统计变量
     server.stat_numcommands = 0;
     server.stat_numconnections = 0;
     server.stat_expiredkeys = 0;
@@ -1528,12 +1616,17 @@ void initServer() {
     server.unixtime = time(NULL);
     server.lastbgsave_status = REDIS_OK;
     server.stop_writes_on_bgsave_err = 1;
+
+    // 关联 server cron 到时间事件
     aeCreateTimeEvent(server.el, 1, serverCron, NULL, NULL);
+
+    // 关联网络连接事件
     if (server.ipfd > 0 && aeCreateFileEvent(server.el,server.ipfd,AE_READABLE,
         acceptTcpHandler,NULL) == AE_ERR) redisPanic("Unrecoverable error creating server.ipfd file event.");
     if (server.sofd > 0 && aeCreateFileEvent(server.el,server.sofd,AE_READABLE,
         acceptUnixHandler,NULL) == AE_ERR) redisPanic("Unrecoverable error creating server.sofd file event.");
 
+    // 如果 AOF 已打开，那么打开或创建 AOF 文件
     if (server.aof_state == REDIS_AOF_ON) {
         server.aof_fd = open(server.aof_filename,
                                O_WRONLY|O_APPEND|O_CREAT,0644);
@@ -1548,15 +1641,23 @@ void initServer() {
      * no explicit limit in the user provided configuration we set a limit
      * at 3 GB using maxmemory with 'noeviction' policy'. This avoids
      * useless crashes of the Redis instance for out of memory. */
+    // 设置内存限制
     if (server.arch_bits == 32 && server.maxmemory == 0) {
         redisLog(REDIS_WARNING,"Warning: 32 bit instance detected but no memory limit set. Setting 3 GB maxmemory limit with 'noeviction' policy now.");
         server.maxmemory = 3072LL*(1024*1024); /* 3 GB */
         server.maxmemory_policy = REDIS_MAXMEMORY_NO_EVICTION;
     }
 
+    // 如果集群模式已打开，那么初始化集群
     if (server.cluster_enabled) clusterInit();
+
+    // 初始化脚本环境
     scriptingInit();
+
+    // 初始化慢查询
     slowlogInit();
+
+    // 初始化后台 IO 
     bioInit();
 }
 
@@ -2475,6 +2576,7 @@ sds genRedisInfoString(char *section) {
     return info;
 }
 
+// INFO 命令的实现
 void infoCommand(redisClient *c) {
     char *section = c->argc == 2 ? c->argv[1]->ptr : "default";
 
@@ -2489,6 +2591,7 @@ void infoCommand(redisClient *c) {
     addReply(c,shared.crlf);
 }
 
+// MONITOR 命令的实现
 void monitorCommand(redisClient *c) {
     /* ignore MONITOR if already slave or in monitor mode */
     if (c->flags & REDIS_SLAVE) return;
@@ -2537,6 +2640,8 @@ int freeMemoryIfNeeded(void) {
                 mem_used -= obuf_bytes;
         }
     }
+
+    // 缩小 AOF 重写缓存
     if (server.aof_state != REDIS_AOF_OFF) {
         mem_used -= sdslen(server.aof_buf);
         mem_used -= aofRewriteBufferSize();
@@ -2554,6 +2659,7 @@ int freeMemoryIfNeeded(void) {
     while (mem_freed < mem_tofree) {
         int j, k, keys_freed = 0;
 
+        // 根据所使用的不同算法，释放数据库中过期键占用的空间
         for (j = 0; j < server.dbnum; j++) {
             long bestval = 0; /* just to prevent warning */
             sds bestkey = NULL;
@@ -2571,6 +2677,7 @@ int freeMemoryIfNeeded(void) {
             if (dictSize(dict) == 0) continue;
 
             /* volatile-random and allkeys-random policy */
+            // 随机算法
             if (server.maxmemory_policy == REDIS_MAXMEMORY_ALLKEYS_RANDOM ||
                 server.maxmemory_policy == REDIS_MAXMEMORY_VOLATILE_RANDOM)
             {
@@ -2579,6 +2686,7 @@ int freeMemoryIfNeeded(void) {
             }
 
             /* volatile-lru and allkeys-lru policy */
+            // LRU 算法
             else if (server.maxmemory_policy == REDIS_MAXMEMORY_ALLKEYS_LRU ||
                 server.maxmemory_policy == REDIS_MAXMEMORY_VOLATILE_LRU)
             {
@@ -2605,6 +2713,7 @@ int freeMemoryIfNeeded(void) {
             }
 
             /* volatile-ttl */
+            // TTL 算法
             else if (server.maxmemory_policy == REDIS_MAXMEMORY_VOLATILE_TTL) {
                 for (k = 0; k < server.maxmemory_samples; k++) {
                     sds thiskey;
@@ -2624,6 +2733,7 @@ int freeMemoryIfNeeded(void) {
             }
 
             /* Finally remove the selected key. */
+            // 移除键
             if (bestkey) {
                 long long delta;
 
@@ -2798,8 +2908,10 @@ int checkForSentinelMode(int argc, char **argv) {
 }
 
 /* Function called at startup to load RDB or AOF file in memory. */
+// 从 RDB 文件或 AOF 文件中载入数据到内存
 void loadDataFromDisk(void) {
     long long start = ustime();
+    // AOF 开启，并且有 AOF 文件时，优先使用 AOF 来还原
     if (server.aof_state == REDIS_AOF_ON) {
         if (loadAppendOnlyFile(server.aof_filename) == REDIS_OK)
             redisLog(REDIS_NOTICE,"DB loaded from append only file: %.3f seconds",(float)(ustime()-start)/1000000);
@@ -2820,6 +2932,9 @@ void redisOutOfMemoryHandler(size_t allocation_size) {
     redisPanic("OOM");
 }
 
+/*
+ * 主调用
+ */
 int main(int argc, char **argv) {
     struct timeval tv;
 
@@ -2830,6 +2945,8 @@ int main(int argc, char **argv) {
     gettimeofday(&tv,NULL);
     dictSetHashFunctionSeed(tv.tv_sec^tv.tv_usec^getpid());
     server.sentinel_mode = checkForSentinelMode(argc,argv);
+
+    // 初始化 server 变量
     initServerConfig();
 
     /* We need to init sentinel right now as parsing the configuration file
@@ -2840,6 +2957,7 @@ int main(int argc, char **argv) {
         initSentinel();
     }
 
+    // 读入选项和配置文件，并修改服务器配置
     if (argc >= 2) {
         int j = 1; /* First option to parse in argv[] */
         sds options = sdsempty();
@@ -2868,6 +2986,7 @@ int main(int argc, char **argv) {
          * configuration file. For instance --port 6380 will generate the
          * string "port 6380\n" to be parsed after the actual file name
          * is parsed, if any. */
+        // 读入并分析（parse）配置选项，然后将它们加入到配置文件的最后
         while(j != argc) {
             if (argv[j][0] == '-' && argv[j][1] == '-') {
                 /* Option name */
@@ -2881,23 +3000,36 @@ int main(int argc, char **argv) {
             }
             j++;
         }
+        // 定义于 config.c ，
+        // 用于清空保存 server.saveparams 和 server.saveparamslen 
         resetServerSaveParams();
+        // 根据配置文件和传入的选项，修改 server 变量（服务器配置）
         loadServerConfig(configfile,options);
         sdsfree(options);
     } else {
         redisLog(REDIS_WARNING, "Warning: no config file specified, using the default config. In order to specify a config file use %s /path/to/%s.conf", argv[0], server.sentinel_mode ? "sentinel" : "redis");
     }
+
+    // 创建 daemon 进程
     if (server.daemonize) daemonize();
+
+    // 初始化服务器功能
     initServer();
+
+    // 打开 PID 文件
     if (server.daemonize) createPidFile();
+
+    // 打印 ASCII 图标
     redisAsciiArt();
 
+    // 如果不在 SENTINEL 模式，那么打印服务器信息
     if (!server.sentinel_mode) {
         /* Things only needed when not running in Sentinel mode. */
         redisLog(REDIS_WARNING,"Server started, Redis version " REDIS_VERSION);
     #ifdef __linux__
         linuxOvercommitMemoryWarning();
     #endif
+        // 从 RDB 文件或 AOF 文件中载入数据
         loadDataFromDisk();
         if (server.ipfd > 0)
             redisLog(REDIS_NOTICE,"The server is now ready to accept connections on port %d", server.port);
@@ -2906,12 +3038,18 @@ int main(int argc, char **argv) {
     }
 
     /* Warning the user about suspicious maxmemory setting. */
+    // 打印内存限制警告
     if (server.maxmemory > 0 && server.maxmemory < 1024*1024) {
         redisLog(REDIS_WARNING,"WARNING: You specified a maxmemory value that is less than 1MB (current value is %llu bytes). Are you sure this is what you really want?", server.maxmemory);
     }
 
+    // 设置事件执行前要运行的函数
     aeSetBeforeSleepProc(server.el,beforeSleep);
+
+    // 启动服务器循环
     aeMain(server.el);
+
+    // 关闭服务器，删除事件
     aeDeleteEventLoop(server.el);
     return 0;
 }

@@ -54,6 +54,9 @@ void resetServerSaveParams() {
     server.saveparamslen = 0;
 }
 
+/*
+ * 从字符串中读入服务器选项
+ */
 void loadServerConfigFromString(char *config) {
     char *err = NULL;
     int linenum = 0, totlines, i;
@@ -447,6 +450,7 @@ void loadServerConfig(char *filename, char *options) {
         config = sdscat(config,"\n");
         config = sdscat(config,options);
     }
+    // 修改配置
     loadServerConfigFromString(config);
     sdsfree(config);
 }
