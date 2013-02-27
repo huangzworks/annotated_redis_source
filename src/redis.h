@@ -565,9 +565,9 @@ struct sharedObjectsStruct {
  * 跳跃表节点
  */
 typedef struct zskiplistNode {
-    // 保存的对象
+    // member 对象
     robj *obj;
-    // 点数
+    // 分值
     double score;
     // 后退指针
     struct zskiplistNode *backward;
