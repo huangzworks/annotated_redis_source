@@ -39,12 +39,15 @@
 /*
  * 创建一个指定长度的 sds 
  * 如果给定了初始化值 init 的话，那么将 init 复制到 sds 的 buf 当中
+ *
+ * T = O(N)
  */
 sds sdsnewlen(const void *init, size_t initlen) {
 
     struct sdshdr *sh;
 
     // 有 init ？
+    // O(N)
     if (init) {
         sh = zmalloc(sizeof(struct sdshdr)+initlen+1);
     } else {
@@ -59,6 +62,7 @@ sds sdsnewlen(const void *init, size_t initlen) {
 
     // 如果给定了 init 且 initlen 不为 0 的话
     // 那么将 init 的内容复制至 sds buf
+    // O(N)
     if (initlen && init)
         memcpy(sh->buf, init, initlen);
 
@@ -71,14 +75,19 @@ sds sdsnewlen(const void *init, size_t initlen) {
 
 /*
  * 创建一个只包含空字符串 "" 的 sds
+ *
+ * T = O(N)
  */
 sds sdsempty(void) {
+    // O(N)
     return sdsnewlen("",0);
 }
 
 /*
  * 根据给定初始化值 init ，创建 sds
  * 如果 init 为 NULL ，那么创建一个 buf 内只包含 \0 终结符的 sds
+ *
+ * T = O(N)
  */
 sds sdsnew(const char *init) {
     size_t initlen = (init == NULL) ? 0 : strlen(init);
@@ -87,6 +96,8 @@ sds sdsnew(const char *init) {
 
 /* 
  * 复制给定 sds
+ *
+ * T = O(N)
  */
 sds sdsdup(const sds s) {
     return sdsnewlen(s, sdslen(s));
@@ -95,6 +106,8 @@ sds sdsdup(const sds s) {
 /*
  * 释放 sds 所对应的 sdshdr 结构的内存
  * 给定 sds 必须为 NULL
+ *
+ * T = O(N)
  */
 void sdsfree(sds s) {
     if (s == NULL) return;
@@ -103,6 +116,8 @@ void sdsfree(sds s) {
 
 /*
  * 更新给定 sds 所对应的 sdshdr 结构的 free 和 len 属性
+ *
+ * T = O(1)
  */
 void sdsupdatelen(sds s) {
 
@@ -118,6 +133,8 @@ void sdsupdatelen(sds s) {
 
 /*
  * 清除给定 sds buf 中的内容，让它只包含一个 \0 终结符
+ *
+ * T = O(1)
  */
 void sdsclear(sds s) {
 
@@ -136,6 +153,8 @@ void sdsclear(sds s) {
  * by sdslen(), but only the free buffer space we have. */
 /* 
  * 对 sds 的 buf 进行扩展，扩展的长度不少于 addlen 。
+ *
+ * T = O(N)
  */
 sds sdsMakeRoomFor(
     sds s,
@@ -178,6 +197,8 @@ sds sdsMakeRoomFor(
 /*
  * 在不改动 sds buf 内容的情况下，将 buf 内多余的空间释放出去。
  * 在对 sds 执行这个函数之后，下一次对这个 sds 的拼接操作必然需要一次内存分配。
+ *
+ * T = O(N)
  */
 sds sdsRemoveFreeSpace(sds s) {
 
@@ -196,6 +217,8 @@ sds sdsRemoveFreeSpace(sds s) {
 
 /*
  * 计算给定 sds buf 的内存长度（包括已使用和未使用的）
+ *
+ * T = O(1)
  */
 size_t sdsAllocSize(sds s) {
 
@@ -255,6 +278,8 @@ size_t sdsAllocSize(sds s) {
  *          free = 12;
  *          buf = "hello mo\0";
  *       }
+ *
+ * T = O(1)
  */
 void sdsIncrLen(sds s, int incr) {
     struct sdshdr *sh = (void*) (s-(sizeof(struct sdshdr)));
@@ -271,6 +296,8 @@ void sdsIncrLen(sds s, int incr) {
  * the original length of the sds will be set to zero. */
 /*
  * 将 sds 的 buf 扩展至给定长度，无内容部分用 0 来填充
+ *
+ * T = O(N)
  */
 sds sdsgrowzero(sds s, size_t len) {
 
@@ -300,6 +327,8 @@ sds sdsgrowzero(sds s, size_t len) {
 
 /*
  * 按长度 len 扩展 sds ，并将 t 拼接到 sds 的末尾
+ *
+ * T = O(N)
  */
 sds sdscatlen(sds s, const void *t, size_t len) {
 
@@ -307,18 +336,22 @@ sds sdscatlen(sds s, const void *t, size_t len) {
 
     size_t curlen = sdslen(s);
 
+    // O(N)
     s = sdsMakeRoomFor(s,len);
     if (s == NULL) return NULL;
 
     // 复制
+    // O(N)
     memcpy(s+curlen, t, len);
 
     // 更新 len 和 free 属性
+    // O(1)
     sh = (void*) (s-(sizeof(struct sdshdr)));
     sh->len = curlen+len;
     sh->free = sh->free-len;
 
     // 终结符
+    // O(1)
     s[curlen+len] = '\0';
 
     return s;
@@ -326,6 +359,8 @@ sds sdscatlen(sds s, const void *t, size_t len) {
 
 /*
  * 将一个 char 数组拼接到 sds 末尾 
+ *
+ * T = O(N)
  */
 sds sdscat(sds s, const char *t) {
     return sdscatlen(s, t, strlen(t));
@@ -333,6 +368,8 @@ sds sdscat(sds s, const char *t) {
 
 /*
  * 拼接两个 sds 
+ *
+ * T = O(N)
  */
 sds sdscatsds(sds s, const sds t) {
     return sdscatlen(s, t, sdslen(t));
@@ -342,6 +379,8 @@ sds sdscatsds(sds s, const sds t) {
  * 将一个 char 数组的前 len 个字节复制至 sds
  * 如果 sds 的 buf 不足以容纳要复制的内容，
  * 那么扩展 buf 的长度，让 buf 的长度为 len 。
+ *
+ * T = O(N)
  */
 sds sdscpylen(sds s, const char *t, size_t len) {
 
@@ -357,6 +396,7 @@ sds sdscpylen(sds s, const char *t, size_t len) {
         totlen = sh->free+sh->len;
     }
 
+    // O(N)
     memcpy(s, t, len);
     s[len] = '\0';
 

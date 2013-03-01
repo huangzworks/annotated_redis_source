@@ -41,9 +41,12 @@ typedef char *sds;
 
 // sdshdr 结构
 struct sdshdr {
-    int len;        // buf 已占用长度
-    int free;       // buf 可用长度
-    char buf[];     // 实际保存字符串的地方
+    // buf 已占用长度
+    int len;
+    // buf 剩余可用长度
+    int free;
+    // 实际保存字符串数据的地方
+    char buf[];
 };
 
 /*
