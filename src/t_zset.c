@@ -326,10 +326,20 @@ int zslDelete(zskiplist *zsl, double score, robj *obj) {
     return 0; /* not found */
 }
 
+/*
+ * 检查 value 是否属于 spec 指定的范围内
+ *
+ * T = O(1)
+ */
 static int zslValueGteMin(double value, zrangespec *spec) {
     return spec->minex ? (value > spec->min) : (value >= spec->min);
 }
 
+/*
+ * 检查 value 是否属于 spec 指定的范围内
+ *
+ * T = O(1)
+ */
 static int zslValueLteMax(double value, zrangespec *spec) {
     return spec->maxex ? (value < spec->max) : (value <= spec->max);
 }
@@ -1643,12 +1653,17 @@ void zremrangebyrankCommand(redisClient *c) {
  * 迭代器结构
  */
 typedef struct {
+    // 迭代目标
     robj *subject;
+    // 类型：可以是集合或有序集
     int type; /* Set, sorted set */
+    // 编码
     int encoding;
+    // 权重
     double weight;
 
     union {
+        // 集合迭代器
         /* Set iterators. */
         union _iterset {
             struct {
@@ -1663,6 +1678,7 @@ typedef struct {
         } set;
 
         /* Sorted set iterators. */
+        // 有序集迭代器
         union _iterzset {
             // ziplist 编码
             struct {

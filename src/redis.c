@@ -1663,6 +1663,7 @@ void initServer() {
 
 /* Populates the Redis Command Table starting from the hard coded list
  * we have on top of redis.c file. */
+// 根据命令中的文字 FLAG ，为命令设置真正的 FLAG 标签
 void populateCommandTable(void) {
     int j;
     int numcommands = sizeof(redisCommandTable)/sizeof(struct redisCommand);
@@ -1696,6 +1697,9 @@ void populateCommandTable(void) {
     }
 }
 
+/*
+ * 重置命令状态 
+ */
 void resetCommandTableStats(void) {
     int numcommands = sizeof(redisCommandTable)/sizeof(struct redisCommand);
     int j;
@@ -1710,11 +1714,17 @@ void resetCommandTableStats(void) {
 
 /* ========================== Redis OP Array API ============================ */
 
+/*
+ * 初始化命令数组
+ */
 void redisOpArrayInit(redisOpArray *oa) {
     oa->ops = NULL;
     oa->numops = 0;
 }
 
+/*
+ * 设置命令数组
+ */
 int redisOpArrayAppend(redisOpArray *oa, struct redisCommand *cmd, int dbid,
                        robj **argv, int argc, int target)
 {
@@ -1731,6 +1741,9 @@ int redisOpArrayAppend(redisOpArray *oa, struct redisCommand *cmd, int dbid,
     return oa->numops;
 }
 
+/*
+ * 释放命令数组
+ */
 void redisOpArrayFree(redisOpArray *oa) {
     while(oa->numops) {
         int j;
@@ -1747,10 +1760,16 @@ void redisOpArrayFree(redisOpArray *oa) {
 
 /* ====================== Commands lookup and execution ===================== */
 
+/*
+ * 根据给定 sds ，查找命令
+ */
 struct redisCommand *lookupCommand(sds name) {
     return dictFetchValue(server.commands, name);
 }
 
+/*
+ * 根据给定 C 字符串 ，查找命令
+ */
 struct redisCommand *lookupCommandByCString(char *s) {
     struct redisCommand *cmd;
     sds name = sdsnew(s);
@@ -1762,6 +1781,8 @@ struct redisCommand *lookupCommandByCString(char *s) {
 
 /* Propagate the specified command (in the context of the specified database id)
  * to AOF and Slaves.
+ *
+ * 传播给定命令到 AOF 或附属节点
  *
  * flags are an xor between:
  * + REDIS_PROPAGATE_NONE (no propagation of command at all)
@@ -1869,6 +1890,7 @@ void call(redisClient *c, int flags) {
  * If 1 is returned the client is still alive and valid and
  * and other operations can be performed by the caller. Otherwise
  * if 0 is returned the client was destroied (i.e. after QUIT). */
+// 执行客户端 C 的命令
 int processCommand(redisClient *c) {
     /* The QUIT command is handled separately. Normal command procs will
      * go through checking for replication and QUIT will cause trouble
@@ -2619,6 +2641,7 @@ void monitorCommand(redisClient *c) {
  * should block the execution of commands that will result in more memory
  * used by the server.
  */
+// 根据算法，查找并释放数据库中的过期键，从而释放更多内存
 int freeMemoryIfNeeded(void) {
     size_t mem_used, mem_tofree, mem_freed;
     int slaves = listLength(server.slaves);
