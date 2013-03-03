@@ -51,13 +51,20 @@
  * 哈希表节点
  */
 typedef struct dictEntry {
-    void *key;              // 键
-    union {                 // 值
+
+    // 键
+    void *key;
+
+    // 值
+    union {
         void *val;
         uint64_t u64;
         int64_t s64;
     } v;
-    struct dictEntry *next; // 链往后继节点
+
+    // 链往后继节点
+    struct dictEntry *next; 
+
 } dictEntry;
 
 /*
@@ -82,10 +89,19 @@ typedef struct dictType {
  * 哈希表
  */
 typedef struct dictht {
-    dictEntry **table;      // 哈希表数组，数组元素为指向哈希表节点的指针
-    unsigned long size;     // table 数组的长度
-    unsigned long sizemask; // 数组长度掩码，用于计算索引值
-    unsigned long used;     // 已有节点数量
+
+    // 哈希表节点指针数组（俗称桶，bucket）
+    dictEntry **table;      
+
+    // 指针数组的大小
+    unsigned long size;     
+
+    // 指针数组的长度掩码，用于计算索引值
+    unsigned long sizemask; 
+
+    // 哈希表现有的节点数量
+    unsigned long used;     
+
 } dictht;
 
 /*
@@ -94,11 +110,22 @@ typedef struct dictht {
  * 每个字典使用两个哈希表，用于实现渐进式 rehash
  */
 typedef struct dict {
-    dictType *type;     // 特定于类型的处理函数
+
+    // 特定于类型的处理函数
+    dictType *type;
+
+    // 类型处理函数的私有数据
     void *privdata;
-    dictht ht[2];       // 哈希表（2个）
-    int rehashidx;      // 记录 rehash 进度的标志，-1 表示未进行 rehash
-    int iterators;      // 当前正在运作的安全迭代器数量
+
+    // 哈希表（2个）
+    dictht ht[2];       
+
+    // 记录 rehash 进度的标志，值为-1 表示 rehash 未进行
+    int rehashidx;
+
+    // 当前正在运作的安全迭代器数量
+    int iterators;      
+
 } dict;
 
 /*
@@ -111,10 +138,14 @@ typedef struct dict {
  * 如果正在运作的迭代器是不安全迭代器，那么它只可以对字典调用 dictNext 函数。
  */
 typedef struct dictIterator {
-    dict *d;                // 正在迭代的字典
+
+    // 正在迭代的字典
+    dict *d;                
+
     int table,              // 正在迭代的哈希表的号码（0 或者 1）
         index,              // 正在迭代的哈希表数组的索引
         safe;               // 是否安全？
+
     dictEntry *entry,       // 当前哈希节点
               *nextEntry;   // 当前哈希节点的后继节点
 } dictIterator;
