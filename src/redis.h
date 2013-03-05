@@ -353,12 +353,25 @@
  * Redis 对象
  */
 typedef struct redisObject {
-    unsigned type:4;        // 类型
-    unsigned notused:2;     // 不使用(对齐位)
-    unsigned encoding:4;    // 编码方式
-    unsigned lru:22;        // LRU 时间(相对于 server.lruclock)
-    int refcount;           // 引用计数
-    void *ptr;              // 对象的实际值
+
+    // 类型
+    unsigned type:4;        
+
+    // 不使用(对齐位)
+    unsigned notused:2;
+
+    // 编码方式
+    unsigned encoding:4;
+
+    // LRU 时间（相对于 server.lruclock）
+    unsigned lru:22;
+
+    // 引用计数
+    int refcount;
+
+    // 指向对象的值
+    void *ptr;
+
 } robj;
 
 /* Macro used to initalize a Redis object allocated on the stack.
