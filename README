@@ -5,7 +5,7 @@
 
 原始源码来自： https://github.com/antirez/redis 
 
-基本上所有单机 Redis 模块都已经注释了： SENTINEL 模块、REPLICATION 模块、 CLUSTER 模块和一些小的辅助模块没有注释。
+基本上所有单机 Redis 模块都已经注释了： SENTINEL 模块、REPLICATION 模块、 CLUSTER 模块、 MONITOR 模块和一些小的辅助模块没有注释。
 
 除了一些空格/空行/缩进方面的调整外，没有对原始代码进行其他改动。
 
