@@ -2934,11 +2934,13 @@ int checkForSentinelMode(int argc, char **argv) {
 // 从 RDB 文件或 AOF 文件中载入数据到内存
 void loadDataFromDisk(void) {
     long long start = ustime();
-    // AOF 开启，并且有 AOF 文件时，优先使用 AOF 来还原
+
+    // 如果开启了 AOF 功能，那么优先使用 AOF 文件来还原数据
     if (server.aof_state == REDIS_AOF_ON) {
         if (loadAppendOnlyFile(server.aof_filename) == REDIS_OK)
             redisLog(REDIS_NOTICE,"DB loaded from append only file: %.3f seconds",(float)(ustime()-start)/1000000);
     } else {
+        // 在没有开启 AOF 功能时，才使用 RDB 来还原
         if (rdbLoad(server.rdb_filename) == REDIS_OK) {
             redisLog(REDIS_NOTICE,"DB loaded from disk: %.3f seconds",
                 (float)(ustime()-start)/1000000);
