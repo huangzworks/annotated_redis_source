@@ -515,7 +515,7 @@ typedef struct redisClient {
     time_t obuf_soft_limit_reached_time;
     int flags;              /* REDIS_SLAVE | REDIS_MONITOR | REDIS_MULTI ... */
 
-    // 复数功能相关
+    // 复制功能相关
     int slaveseldb;         /* slave selected db, if this client is a slave */
     int authenticated;      /* when requirepass is non-NULL */
     // 客户端当前的同步状态
@@ -539,7 +539,7 @@ typedef struct redisClient {
     // 被监视的 KEY
     list *watched_keys;     /* Keys WATCHED for MULTI/EXEC CAS */
 
-    // pubsub
+    // 订阅与发布
     dict *pubsub_channels;  /* channels a client is interested in (SUBSCRIBE) */
     list *pubsub_patterns;  /* patterns a client is interested in (SUBSCRIBE) */
 
