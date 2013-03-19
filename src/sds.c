@@ -295,7 +295,7 @@ void sdsIncrLen(sds s, int incr) {
 /* Grow the sds to have the specified length. Bytes that were not part of
  * the original length of the sds will be set to zero. */
 /*
- * 将 sds 的 buf 扩展至给定长度，无内容部分用 0 来填充
+ * 将 sds 的 buf 扩展至给定长度，无内容部分用 \0 来填充
  *
  * T = O(N)
  */
@@ -313,7 +313,7 @@ sds sdsgrowzero(sds s, size_t len) {
     if (s == NULL) return NULL;
 
     /* Make sure added region doesn't contain garbage */
-    // 使用 0 来填充空位，确保空位中不包含垃圾数据
+    // 使用 \0 来填充空位，确保空位中不包含垃圾数据
     sh = (void*)(s-(sizeof(struct sdshdr)));
     memset(s+curlen,0,(len-curlen+1)); /* also set trailing \0 byte */
 
