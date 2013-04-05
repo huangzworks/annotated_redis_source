@@ -59,7 +59,7 @@
  *
  * Header 包括两部分：
  * 1) 前一个节点的长度，在从后往前遍历时使用
- * 2) 这个节点所储存的字符串的长度
+ * 2) 当前节点所保存的值的类型和长度
  *
  * The length of the previous entry is encoded in the following way:
  * If this length is smaller than 254 bytes, it will only consume a single
