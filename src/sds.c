@@ -378,7 +378,7 @@ sds sdscatsds(sds s, const sds t) {
 /*
  * 将一个 char 数组的前 len 个字节复制至 sds
  * 如果 sds 的 buf 不足以容纳要复制的内容，
- * 那么扩展 buf 的长度，让 buf 的长度为 len 。
+ * 那么扩展 buf 的长度，让 buf 的长度大于等于 len 。
  *
  * T = O(N)
  */
@@ -389,7 +389,9 @@ sds sdscpylen(sds s, const char *t, size_t len) {
     // 是否需要扩展 buf ？
     size_t totlen = sh->free+sh->len;
     if (totlen < len) {
-        // 扩展 buf 长度，长度刚好为 len
+        // 扩展 buf 长度，让它的长度大于等于 len
+        // 具体的大小请参考 sdsMakeRoomFor 的注释
+        // T = O(N)
         s = sdsMakeRoomFor(s,len-sh->len);
         if (s == NULL) return NULL;
         sh = (void*) (s-(sizeof(struct sdshdr)));
