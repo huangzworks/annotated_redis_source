@@ -596,8 +596,8 @@ void scriptingInit(void) {
      * 创建一个字典，用于将 SHA 校验码映射到脚本
      * This is useful for replication, as we need to replicate EVALSHA
      * as EVAL, so we need to remember the associated script. 
-     * 这个主要用于复制，因为我们需要将 EVAL 复制为 EVALSHA ，
-     * 所以需要记录已关联的脚本。
+     * 因为 Redis 目前复制脚本的方法是将 EVALSHA 转换成 EVAL 来进行的，
+     * 所以程序需要保存和 SHA 校验值相对应的脚本。
      */
     server.lua_scripts = dictCreate(&shaScriptObjectDictType,NULL);
 
@@ -838,7 +838,7 @@ void luaSetGlobalArray(lua_State *lua, char *var, robj **elev, int elec) {
  * The function name musts be a 2 characters long string, since all the
  * functions we defined in the Lua context are in the form:
  *
- * 所有函数名称都的长度都必须大于 2 ，所以我们使用以下格式来创建函数名：
+ * 所有函数名称的长度都必须大于 2 ，因为我们使用以下格式来创建函数名：
  *
  *   f_<hex sha1 sum>
  *
