@@ -1130,9 +1130,13 @@ int rewriteAppendOnlyFile(char *filename) {
             // 保存可能有的过期时间
             if (expiretime != -1) {
                 char cmd[]="*3\r\n$9\r\nPEXPIREAT\r\n";
-                /* If this key is already expired skip it */
-                // 不重写已过期的 key
+
+                /* If this key is already expired skip it 
+                 *
+                 * 如果键已经过期，那么不写入它的过期时间
+                 */
                 if (expiretime < now) continue;
+
                 if (rioWrite(&aof,cmd,sizeof(cmd)-1) == 0) goto werr;
                 if (rioWriteBulkObject(&aof,&key) == 0) goto werr;
                 if (rioWriteBulkLongLong(&aof,expiretime) == 0) goto werr;
