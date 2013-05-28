@@ -476,7 +476,7 @@ void touchWatchedKeysOnFlush(int dbid) {
 void watchCommand(redisClient *c) {
     int j;
 
-    // 只能在事务中使用
+    // 不能在事务中使用
     if (c->flags & REDIS_MULTI) {
         addReplyError(c,"WATCH inside MULTI is not allowed");
         return;
