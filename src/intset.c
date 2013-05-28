@@ -246,11 +246,13 @@ static intset *intsetUpgradeAndAdd(intset *is, int64_t value) {
 /*
  * 对从 from 开始，到 is 末尾的所有数据进行移动，以 to 为起点
  *
- * 假设 3 为 from , 2 为 to ，
+ * 假设索引 2 为 from , 索引 1 为 to ，
  * 之前：
- *   | 1 | 2 | 3 | 4 |
+ *   索引 | 0 | 1 | 2 | 3 |
+ *   值   | a | b | c | d |
  * 之后：
- *   | 1 | 3 | 4 | 4 |
+ *   索引 | 0 | 1 | 2 | 3 |
+ *   值   | a | c | d | d |
  *
  * T = theta(n)
  */
