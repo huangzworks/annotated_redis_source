@@ -637,21 +637,22 @@ dictType migrateCacheDictType = {
 };
 
 /*
- * 检查字典节点的使用率是否低于系统允许的最小比率
+ * 检查字典的使用率是否低于系统允许的最小比率
  *
  * 是的话返回 1 ，否则返回 0 。
  */
 int htNeedsResize(dict *dict) {
     long long size, used;
 
-    // 已用节点数
+    // 哈希表已用节点数量
     size = dictSlots(dict);
-    // 可用节点数
+
+    // 哈希表大小
     used = dictSize(dict);
 
-    // 哈希表大小大于 DICT_HT_INITIAL_SIZE 
-    // 并且空间的占用百分比为 10% 时
-    // 返回真
+    // 当哈希表的大小大于 DICT_HT_INITIAL_SIZE 
+    // 并且字典的填充率低于 REDIS_HT_MINFILL 时
+    // 返回 1
     return (size && used && size > DICT_HT_INITIAL_SIZE &&
             (used*100/size < REDIS_HT_MINFILL));
 }
@@ -659,6 +660,9 @@ int htNeedsResize(dict *dict) {
 /* If the percentage of used slots in the HT reaches REDIS_HT_MINFILL
  * we resize the hash table to save memory */
 /*
+ * 对服务器中的所有数据库键空间字典、以及过期时间字典进行检查，
+ * 看是否需要对这些字典进行收缩。
+ *
  * 如果字典的使用空间比率低于 REDIS_HT_MINFILL 
  * 那么将字典的大小缩小，让 USED/BUCKETS 的比率 <= 1
  */
@@ -667,11 +671,11 @@ void tryResizeHashTables(void) {
 
     for (j = 0; j < server.dbnum; j++) {
 
-        // 缩小 key space
+        // 缩小键空间字典
         if (htNeedsResize(server.db[j].dict))
             dictResize(server.db[j].dict);
 
-        // 缩小 expire space
+        // 缩小过期时间字典
         if (htNeedsResize(server.db[j].expires))
             dictResize(server.db[j].expires);
     }
