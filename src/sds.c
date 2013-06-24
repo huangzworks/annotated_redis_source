@@ -117,7 +117,7 @@ void sdsfree(sds s) {
 /*
  * 更新给定 sds 所对应的 sdshdr 结构的 free 和 len 属性
  *
- * T = O(1)
+ * T = O(n)
  */
 void sdsupdatelen(sds s) {
 
