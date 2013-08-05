@@ -61,7 +61,7 @@ redisClient *createClient(int fd) {
      * contexts (for instance a Lua script) we need a non connected client. */
     // 因为 Redis 命令总在客户端的上下文中执行，
     // 有时候为了在服务器内部执行命令，需要使用伪客户端来执行命令
-    // 在 fd == 1 时，创建的客户端为伪终端
+    // 在 fd == -1 时，创建的客户端为伪终端
     if (fd != -1) {
         anetNonBlock(NULL,fd);
         anetTcpNoDelay(NULL,fd);
