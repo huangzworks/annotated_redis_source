@@ -104,8 +104,9 @@ sds sdsdup(const sds s) {
 }
 
 /*
- * 释放 sds 所对应的 sdshdr 结构的内存
- * 给定 sds 必须为 NULL
+ * 释放 sds 所对应的 sdshdr 结构的内存。
+ *
+ * 如果 s 为 NULL ，那么不做动作。
  *
  * T = O(N)
  */
