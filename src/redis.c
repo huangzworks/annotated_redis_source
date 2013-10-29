@@ -644,10 +644,10 @@ dictType migrateCacheDictType = {
 int htNeedsResize(dict *dict) {
     long long size, used;
 
-    // 哈希表已用节点数量
+    // 哈希表大小
     size = dictSlots(dict);
 
-    // 哈希表大小
+    // 哈希表已用节点数量
     used = dictSize(dict);
 
     // 当哈希表的大小大于 DICT_HT_INITIAL_SIZE 
