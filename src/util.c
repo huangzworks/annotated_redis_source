@@ -239,7 +239,7 @@ int ll2string(char *s, size_t len, long long value) {
 }
 
 /*
- * 将一个字符串转换为 long logn 整数值
+ * 将一个字符串转换为 long long 整数值
  *
  * 复杂度：O(N)
  *
