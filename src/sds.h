@@ -49,6 +49,8 @@ struct sdshdr {
     int free;
 
     // 实际保存字符串数据的地方
+    // 利用c99(C99 specification 6.7.2.1.16)中引入的 flexible array member,通过buf来引用sdshdr后面的地址，
+    // 详情google "flexible array member"
     char buf[];
 };
 

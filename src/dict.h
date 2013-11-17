@@ -71,7 +71,7 @@ typedef struct dictEntry {
  * 特定于类型的一簇处理函数
  */
 typedef struct dictType {
-    // 计算键的哈希值函数
+    // 计算键的哈希值函数, 计算key在hash table中的存储位置，不同的dict可以有不同的hash function.
     unsigned int (*hashFunction)(const void *key);
     // 复制键的函数
     void *(*keyDup)(void *privdata, const void *key);
