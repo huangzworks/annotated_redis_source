@@ -86,7 +86,7 @@ zskiplistNode *zslCreateNode(int level, double score, robj *obj) {
 /*
  * 创建一个跳跃表
  *
- * T = O(N)
+ * T = O(1)
  */
 zskiplist *zslCreate(void) {
     int j;
@@ -99,7 +99,7 @@ zskiplist *zslCreate(void) {
 
     // 初始化头节点， O(1)
     zsl->header = zslCreateNode(ZSKIPLIST_MAXLEVEL,0,NULL);
-    // 初始化层指针，O(N)
+    // 初始化层指针，O(1)
     for (j = 0; j < ZSKIPLIST_MAXLEVEL; j++) {
         zsl->header->level[j].forward = NULL;
         zsl->header->level[j].span = 0;
