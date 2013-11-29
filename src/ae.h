@@ -80,9 +80,9 @@ typedef void aeBeforeSleepProc(struct aeEventLoop *eventLoop);
 typedef struct aeFileEvent {
     // 事件类型掩码，值可以是 AE_READABLE 或 AE_WRITABLE ，或者两者的或
     int mask; /* one of AE_(READABLE|WRITABLE) */
-    // 写事件函数
-    aeFileProc *rfileProc;
     // 读事件函数
+    aeFileProc *rfileProc;
+    // 写事件函数
     aeFileProc *wfileProc;
     // 多路复用库的私有数据
     void *clientData;
