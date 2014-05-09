@@ -80,7 +80,7 @@ static size_t rioBufferWrite(rio *r, const void *buf, size_t len) {
 
 /* Returns 1 or 0 for success/failure. */
 /*
- * 将长度为 len 的内容 buf 复制到 RIO 缓存中。
+ * 从 RIO 缓存复制 len 字节内容到 buf 里面。
  *
  * 复制成功返回 1 ，否则返回 0 。
  */
