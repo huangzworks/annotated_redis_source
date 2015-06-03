@@ -13,9 +13,8 @@
 
 have fun!
 
-huangz
-2013.3.5 
-(last updated at 2013.3.9)
+| huangz
+| 2013.3.5 
 
 ----
 
