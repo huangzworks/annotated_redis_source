@@ -462,7 +462,7 @@ dictEntry *dictAddRaw(dict *d, void *key)
         return NULL;
 
     /* Allocate the memory and store the new entry */
-    // 决定该把新元素放在那个哈希表
+    // 决定该把新元素放在哪个哈希表
     ht = dictIsRehashing(d) ? &d->ht[1] : &d->ht[0];
     // 为新元素分配节点空间
     entry = zmalloc(sizeof(*entry));
