@@ -179,7 +179,7 @@ $(REDIS_CHECK_AOF_NAME): $(REDIS_CHECK_AOF_OBJ)
 # Because the jemalloc.h header is generated as a part of the jemalloc build,
 # building it should complete before building any other object. Instead of
 # depending on a single artifact, build all dependencies first.
-%.o: %.c .make-prerequisites
+%.o: %.c dep
 	$(REDIS_CC) -c $<
 
 clean:
